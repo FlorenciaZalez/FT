@@ -9,9 +9,9 @@ class LocationCreate(BaseModel):
     position: str = "01"  # posición: 1, 01...
     description: str | None = None
 
-@validator("zone", pre=True)
-def zone_upper(cls, v):
-    return v.strip().upper()
+    @validator("zone", pre=True)
+    def zone_upper(cls, v):
+        return v.strip().upper()
 
 
 class LocationUpdate(BaseModel):
