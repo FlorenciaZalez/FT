@@ -88,7 +88,8 @@ class OrderItemResponse(BaseModel):
     picked_quantity: int
     location_code: str | None
 
-    model_config = {"from_attributes": True}
+    class Config:
+        orm_mode = True
 
 
 class OrderStatusLogResponse(BaseModel):
@@ -99,7 +100,8 @@ class OrderStatusLogResponse(BaseModel):
     notes: str | None
     created_at: datetime
 
-    model_config = {"from_attributes": True}
+    class Config:
+        orm_mode = True
 
 
 class ReturnReceptionResponse(BaseModel):
@@ -161,7 +163,8 @@ class OrderResponse(BaseModel):
     items: list[OrderItemResponse] = []
     return_receptions: list[ReturnReceptionResponse] = []
 
-    model_config = {"from_attributes": True}
+    class Config:
+        orm_mode = True
 
 
 class AssignOperatorRequest(BaseModel):

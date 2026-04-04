@@ -58,7 +58,8 @@ class StockResponse(BaseModel):
     min_stock_alert: int
     updated_at: datetime
 
-    model_config = {"from_attributes": True}
+    class Config:
+        orm_mode = True
 
 
 class StockSummaryItem(BaseModel):
@@ -85,4 +86,5 @@ class StockMovementResponse(BaseModel):
     notes: str | None
     created_at: datetime
 
-    model_config = {"from_attributes": True}
+    class Config:
+        orm_mode = True

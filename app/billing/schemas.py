@@ -20,7 +20,8 @@ class BillingRatesResponse(BillingRatesUpdate):
     created_at: datetime
     updated_at: datetime
 
-    model_config = {"from_attributes": True}
+    class Config:
+        orm_mode = True
 
 
 class PreparationRecordResponse(BaseModel):
@@ -38,7 +39,8 @@ class PreparationRecordResponse(BaseModel):
     price_applied: float
     recorded_at: datetime
 
-    model_config = {"from_attributes": True}
+    class Config:
+        orm_mode = True
 
 
 class ClientRatesUpdate(BaseModel):
@@ -89,7 +91,7 @@ class BillingPreviewItem(BaseModel):
 
 
 class ClientStorageRecordBase(BaseModel):
-    period: str = Field(pattern=r"^\d{4}-\d{2}$")
+    period: str = Field(regex=r"^\d{4}-\d{2}$")
     storage_m3: float = Field(gt=0)
 
 
@@ -143,7 +145,7 @@ class ChargeResponse(BaseModel):
 
 
 class GenerateChargesRequest(BaseModel):
-    period: str = Field(pattern=r"^\d{4}-\d{2}$")
+    period: str = Field(regex=r"^\d{4}-\d{2}$")
     due_date: date | None = None
     overwrite: bool = True
 
@@ -190,7 +192,7 @@ class BillingDocumentResponse(BaseModel):
 
 
 class GenerateBillingDocumentsRequest(BaseModel):
-    period: str = Field(pattern=r"^\d{4}-\d{2}$")
+    period: str = Field(regex=r"^\d{4}-\d{2}$")
     overwrite: bool = True
 
 
@@ -219,7 +221,8 @@ class ProductCreationRecordResponse(BaseModel):
     price_applied: float
     created_at: datetime
 
-    model_config = {"from_attributes": True}
+    class Config:
+        orm_mode = True
 
 
 class TransportDispatchRecordResponse(BaseModel):
@@ -232,7 +235,8 @@ class TransportDispatchRecordResponse(BaseModel):
     costo_aplicado: float
     fecha: datetime
 
-    model_config = {"from_attributes": True}
+    class Config:
+        orm_mode = True
 
 
 class TransportDispatchRecordCreate(BaseModel):
@@ -253,7 +257,8 @@ class MerchandiseReceptionRecordResponse(BaseModel):
     costo_total: float
     created_at: datetime
 
-    model_config = {"from_attributes": True}
+    class Config:
+        orm_mode = True
 
 
 class MerchandiseReceptionRecordCreate(BaseModel):
@@ -275,7 +280,8 @@ class ManualChargeResponse(BaseModel):
     created_at: datetime
     is_locked: bool = False
 
-    model_config = {"from_attributes": True}
+    class Config:
+        orm_mode = True
 
 
 class ManualChargeCreate(BaseModel):
@@ -284,4 +290,4 @@ class ManualChargeCreate(BaseModel):
     descripcion: str | None = Field(default=None, max_length=500)
     tipo: str | None = Field(default=None, max_length=50)
     fecha: date
-    periodo: str = Field(pattern=r"^\d{4}-\d{2}$")
+    periodo: str = Field(regex=r"^\d{4}-\d{2}$")

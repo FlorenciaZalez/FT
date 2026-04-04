@@ -34,7 +34,7 @@ async def create_postal_code_range(
     user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ):
-    return await service.create_postal_code_range(db, body.model_dump())
+    return await service.create_postal_code_range(db, body.dict())
 
 
 @router.put("/postal-code-ranges/{range_id}", response_model=PostalCodeRangeResponse)
@@ -44,7 +44,7 @@ async def update_postal_code_range(
     user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ):
-    return await service.update_postal_code_range(db, range_id, body.model_dump(exclude_unset=True))
+    return await service.update_postal_code_range(db, range_id, body.dict(exclude_unset=True))
 
 
 @router.delete("/postal-code-ranges/{range_id}", status_code=204)
@@ -70,7 +70,7 @@ async def create_shipping_rate(
     user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ):
-    return await service.create_shipping_rate(db, body.model_dump())
+    return await service.create_shipping_rate(db, body.dict())
 
 
 @router.put("/rates/{rate_id}", response_model=ShippingRateResponse)
@@ -80,7 +80,7 @@ async def update_shipping_rate(
     user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ):
-    return await service.update_shipping_rate(db, rate_id, body.model_dump(exclude_unset=True))
+    return await service.update_shipping_rate(db, rate_id, body.dict(exclude_unset=True))
 
 
 @router.delete("/rates/{rate_id}", status_code=204)
@@ -106,7 +106,7 @@ async def create_handling_rate(
     user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ):
-    return await service.create_handling_rate(db, body.model_dump())
+    return await service.create_handling_rate(db, body.dict())
 
 
 @router.put("/handling-rates/{rate_id}", response_model=HandlingRateResponse)
@@ -116,7 +116,7 @@ async def update_handling_rate(
     user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ):
-    return await service.update_handling_rate(db, rate_id, body.model_dump(exclude_unset=True))
+    return await service.update_handling_rate(db, rate_id, body.dict(exclude_unset=True))
 
 
 @router.delete("/handling-rates/{rate_id}", status_code=204)

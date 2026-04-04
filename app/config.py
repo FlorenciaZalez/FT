@@ -25,7 +25,9 @@ class Settings(BaseSettings):
     DEBUG: bool = True
     UPLOADS_DIR: str = "uploads"
 
-    model_config = {"env_file": ".env", "extra": "ignore"}
+    class Config:
+        env_file = ".env"
+        extra = "ignore"
 
 
 @lru_cache

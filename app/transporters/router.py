@@ -58,7 +58,7 @@ async def create_transporter(
     user: User = Depends(require_operator),
     db: AsyncSession = Depends(get_db),
 ):
-    return await service.create_transporter(db, body.model_dump())
+    return await service.create_transporter(db, body.dict())
 
 
 @router.put("/{transporter_id}", response_model=TransporterResponse)
@@ -68,7 +68,7 @@ async def update_transporter(
     user: User = Depends(require_operator),
     db: AsyncSession = Depends(get_db),
 ):
-    return await service.update_transporter(db, transporter_id, body.model_dump(exclude_unset=True))
+    return await service.update_transporter(db, transporter_id, body.dict(exclude_unset=True))
 
 
 @router.delete("/{transporter_id}", status_code=204)

@@ -38,7 +38,7 @@ async def create_location(
     user: User = Depends(require_operator),
     db: AsyncSession = Depends(get_db),
 ):
-    return await service.create_location(db, body.model_dump())
+    return await service.create_location(db, body.dict())
 
 
 @router.get("/{location_id}", response_model=LocationResponse)
@@ -57,7 +57,7 @@ async def update_location(
     user: User = Depends(require_operator),
     db: AsyncSession = Depends(get_db),
 ):
-    return await service.update_location(db, location_id, body.model_dump(exclude_unset=True))
+    return await service.update_location(db, location_id, body.dict(exclude_unset=True))
 
 
 @router.delete("/{location_id}", status_code=204)

@@ -87,7 +87,7 @@ async def create_mapping(
     user: User = Depends(require_any),
     db: AsyncSession = Depends(get_db),
 ):
-    return await service.create_mapping(db, user, body.model_dump())
+    return await service.create_mapping(db, user, body.dict())
 
 
 @router.put("/mappings/{mapping_id}", response_model=MLMappingResponse)
@@ -97,7 +97,7 @@ async def update_mapping(
     user: User = Depends(require_any),
     db: AsyncSession = Depends(get_db),
 ):
-    return await service.update_mapping(db, mapping_id, user, body.model_dump(exclude_unset=True))
+    return await service.update_mapping(db, mapping_id, user, body.dict(exclude_unset=True))
 
 
 @router.delete("/mappings/{mapping_id}", status_code=204)

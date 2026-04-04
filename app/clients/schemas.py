@@ -37,7 +37,8 @@ class MLAccountInfo(BaseModel):
     ml_nickname: str | None
     connected_at: datetime
 
-    model_config = {"from_attributes": True}
+    class Config:
+        orm_mode = True
 
 
 class ClientResponse(BaseModel):
@@ -56,4 +57,5 @@ class ClientResponse(BaseModel):
     ml_account: MLAccountInfo | None = None
     billing_schedule: BillingScheduleInfo | None = None
 
-    model_config = {"from_attributes": True}
+    class Config:
+        orm_mode = True

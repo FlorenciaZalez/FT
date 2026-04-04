@@ -49,4 +49,4 @@ async def register(body: RegisterRequest, admin: User = Depends(require_admin), 
 @router.put("/users/{user_id}", response_model=UserResponse)
 async def update_user(user_id: int, body: UpdateUserRequest, admin: User = Depends(require_admin), db: AsyncSession = Depends(get_db)):
     """Only admins can update users."""
-    return await service.update_user(db, user_id, body.model_dump(exclude_unset=True))
+    return await service.update_user(db, user_id, body.dict(exclude_unset=True))

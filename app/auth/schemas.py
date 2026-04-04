@@ -42,4 +42,5 @@ class UserResponse(BaseModel):
     is_active: bool
     zones: list[str] | None = None
 
-    model_config = {"from_attributes": True}
+    class Config:
+        orm_mode = True

@@ -36,7 +36,7 @@ async def create_order(
     user: User = Depends(require_any),
     db: AsyncSession = Depends(get_db),
 ):
-    return await service.create_order(db, user, body.model_dump())
+    return await service.create_order(db, user, body.dict())
 
 
 @router.put("/{order_id}")
@@ -46,7 +46,7 @@ async def update_order(
     user: User = Depends(require_any),
     db: AsyncSession = Depends(get_db),
 ):
-    return await service.update_order(db, order_id, user, body.model_dump(exclude_unset=True))
+    return await service.update_order(db, order_id, user, body.dict(exclude_unset=True))
 
 
 @router.post("/{order_id}/resolve-mapping")

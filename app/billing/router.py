@@ -47,7 +47,7 @@ async def update_global_rates(
     user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ):
-    return await service.update_global_rates(db, body.model_dump())
+    return await service.update_global_rates(db, body.dict())
 
 
 @router.get("/rates/clients", response_model=list[ClientRatesResponse])
@@ -65,12 +65,12 @@ async def upsert_client_rates(
     user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ):
-    return await service.upsert_client_rates(db, client_id, body.model_dump())
+    return await service.upsert_client_rates(db, client_id, body.dict())
 
 
 @router.get("/preview")
 async def preview_billing(
-    period: str = Query(..., pattern=r"^\d{4}-\d{2}$"),
+    period: str = Query(..., regex=r"^\d{4}-\d{2}$"),
     user: User = Depends(require_any),
     db: AsyncSession = Depends(get_db),
 ):
@@ -80,7 +80,7 @@ async def preview_billing(
 @router.get("/storage-records", response_model=list[ClientStorageRecordResponse])
 async def list_storage_records(
     client_id: int | None = Query(None, ge=1),
-    period: str | None = Query(None, pattern=r"^\d{4}-\d{2}$"),
+    period: str | None = Query(None, regex=r"^\d{4}-\d{2}$"),
     user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ):
@@ -93,7 +93,7 @@ async def create_storage_record(
     user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ):
-    return await service.create_storage_record(db, body.model_dump())
+    return await service.create_storage_record(db, body.dict())
 
 
 @router.put("/storage-records/{record_id}", response_model=ClientStorageRecordResponse)
@@ -103,7 +103,7 @@ async def update_storage_record(
     user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ):
-    return await service.update_storage_record(db, record_id, body.model_dump())
+    return await service.update_storage_record(db, record_id, body.dict())
 
 
 @router.delete("/storage-records/{record_id}")
@@ -134,10 +134,10 @@ async def generate_billing_charges(
 
 @router.get("/charges", response_model=list[ChargeResponse])
 async def list_billing_charges(
-    period: str | None = Query(None, pattern=r"^\d{4}-\d{2}$"),
+    period: str | None = Query(None, regex=r"^\d{4}-\d{2}$"),
     client_id: int | None = Query(None, ge=1),
-    due_date_from: str | None = Query(None, pattern=r"^\d{4}-\d{2}-\d{2}$"),
-    due_date_to: str | None = Query(None, pattern=r"^\d{4}-\d{2}-\d{2}$"),
+    due_date_from: str | None = Query(None, regex=r"^\d{4}-\d{2}-\d{2}$"),
+    due_date_to: str | None = Query(None, regex=r"^\d{4}-\d{2}-\d{2}$"),
     status: str | None = Query(None),
     user: User = Depends(require_any),
     db: AsyncSession = Depends(get_db),
@@ -182,7 +182,7 @@ async def generate_single_billing_document(
 
 @router.get("/documents", response_model=list[BillingDocumentResponse])
 async def list_billing_documents(
-    period: str | None = Query(None, pattern=r"^\d{4}-\d{2}$"),
+    period: str | None = Query(None, regex=r"^\d{4}-\d{2}$"),
     client_id: int | None = Query(None, ge=1),
     status: str | None = Query(None),
     user: User = Depends(require_any),
@@ -211,7 +211,7 @@ async def get_billing_alerts(
 @router.get("/preparation-records", response_model=list[PreparationRecordResponse])
 async def list_preparation_records(
     client_id: int | None = Query(None, ge=1),
-    period: str | None = Query(None, pattern=r"^\d{4}-\d{2}$"),
+    period: str | None = Query(None, regex=r"^\d{4}-\d{2}$"),
     order_id: int | None = Query(None, ge=1),
     user: User = Depends(require_any),
     db: AsyncSession = Depends(get_db),
@@ -222,7 +222,7 @@ async def list_preparation_records(
 @router.get("/product-creation-records", response_model=list[ProductCreationRecordResponse])
 async def list_product_creation_records(
     client_id: int | None = Query(None, ge=1),
-    period: str | None = Query(None, pattern=r"^\d{4}-\d{2}$"),
+    period: str | None = Query(None, regex=r"^\d{4}-\d{2}$"),
     user: User = Depends(require_any),
     db: AsyncSession = Depends(get_db),
 ):
@@ -232,7 +232,7 @@ async def list_product_creation_records(
 @router.get("/transport-dispatch-records", response_model=list[TransportDispatchRecordResponse])
 async def list_transport_dispatch_records(
     client_id: int | None = Query(None, ge=1),
-    period: str | None = Query(None, pattern=r"^\d{4}-\d{2}$"),
+    period: str | None = Query(None, regex=r"^\d{4}-\d{2}$"),
     user: User = Depends(require_any),
     db: AsyncSession = Depends(get_db),
 ):
@@ -245,7 +245,7 @@ async def create_transport_dispatch_record(
     user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ):
-    return await service.create_transport_dispatch_record(db, body.model_dump())
+    return await service.create_transport_dispatch_record(db, body.dict())
 
 
 @router.delete("/transport-dispatch-records/{record_id}")
@@ -261,7 +261,7 @@ async def delete_transport_dispatch_record(
 @router.get("/merchandise-reception-records", response_model=list[MerchandiseReceptionRecordResponse])
 async def list_merchandise_reception_records(
     client_id: int | None = Query(None, ge=1),
-    period: str | None = Query(None, pattern=r"^\d{4}-\d{2}$"),
+    period: str | None = Query(None, regex=r"^\d{4}-\d{2}$"),
     user: User = Depends(require_any),
     db: AsyncSession = Depends(get_db),
 ):
@@ -274,7 +274,7 @@ async def create_merchandise_reception_record(
     user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ):
-    return await service.create_merchandise_reception_record(db, body.model_dump())
+    return await service.create_merchandise_reception_record(db, body.dict())
 
 
 @router.delete("/merchandise-reception-records/{record_id}")
@@ -290,7 +290,7 @@ async def delete_merchandise_reception_record(
 @router.get("/manual-charges", response_model=list[ManualChargeResponse])
 async def list_manual_charges(
     client_id: int | None = Query(None, ge=1),
-    period: str | None = Query(None, pattern=r"^\d{4}-\d{2}$"),
+    period: str | None = Query(None, regex=r"^\d{4}-\d{2}$"),
     user: User = Depends(require_any),
     db: AsyncSession = Depends(get_db),
 ):
@@ -303,7 +303,7 @@ async def create_manual_charge(
     user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ):
-    return await service.create_manual_charge(db, body.model_dump())
+    return await service.create_manual_charge(db, body.dict())
 
 
 @router.delete("/manual-charges/{charge_id}")

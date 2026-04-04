@@ -47,7 +47,7 @@ async def create_product(
     user: User = Depends(require_any),
     db: AsyncSession = Depends(get_db),
 ):
-    product = await service.create_product(db, user, body.model_dump())
+    product = await service.create_product(db, user, body.dict())
     return _enrich(product)
 
 
@@ -68,7 +68,7 @@ async def update_product(
     user: User = Depends(require_any),
     db: AsyncSession = Depends(get_db),
 ):
-    product = await service.update_product(db, product_id, user, body.model_dump(exclude_unset=True))
+    product = await service.update_product(db, product_id, user, body.dict(exclude_unset=True))
     return _enrich(product)
 
 

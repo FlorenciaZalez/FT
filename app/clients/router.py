@@ -27,7 +27,7 @@ async def create_client(
     admin: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ):
-    return await service.create_client(db, body.model_dump())
+    return await service.create_client(db, body.dict())
 
 
 @router.get("/{client_id}", response_model=ClientResponse)
@@ -46,7 +46,7 @@ async def update_client(
     admin: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ):
-    return await service.update_client(db, client_id, body.model_dump(exclude_unset=True))
+    return await service.update_client(db, client_id, body.dict(exclude_unset=True))
 
 
 @router.delete("/{client_id}", status_code=204)

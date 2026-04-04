@@ -1,4 +1,4 @@
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, validator
 from datetime import datetime
 
 
@@ -9,8 +9,7 @@ class LocationCreate(BaseModel):
     position: str = "01"  # posición: 1, 01...
     description: str | None = None
 
-    @field_validator("zone")
-    @classmethod
+    @validator("zone")
     def zone_upper(cls, v: str) -> str:
         return v.strip().upper()
 
@@ -31,4 +30,5 @@ class LocationResponse(BaseModel):
     is_active: bool
     created_at: datetime
 
-    model_config = {"from_attributes": True}
+    class Config:
+        orm_mode = True
