@@ -1,0 +1,81 @@
+from fastapi import APIRouter, Depends, Query
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.database import get_db
+from app.auth.dependencies import get_current_user, require_any
+from app.auth.models import User
+from app.products import service
+from app.products.schemas import ProductCreate, ProductUpdate, ProductResponse
+
+
+def _get_preparation_type(product) -> str:
+    preparation_type = getattr(product, "preparation_type", None)
+    if preparation_type in {"simple", "especial"}:
+        return preparation_type
+    return "especial" if getattr(product, "weight_category", None) == "heavy" else "simple"
+
+router = APIRouter(prefix="/products", tags=["Products"])
+
+
+def _enrich(product) -> dict:
+    """Add computed fields used by the products UI."""
+    data = {c.key: getattr(product, c.key) for c in product.__table__.columns}
+    direct_ml_mappings = [
+        mapping for mapping in product.ml_mappings if mapping.is_active and mapping.ml_variation_id is None
+    ]
+    data["has_ml_mapping"] = bool(direct_ml_mappings)
+    data["ml_item_id"] = direct_ml_mappings[0].ml_item_id if direct_ml_mappings else None
+    data["location_code"] = product.location.code if product.location else None
+    data["preparation_type"] = _get_preparation_type(product)
+    return data
+
+
+@router.get("", response_model=list[ProductResponse])
+async def list_products(
+    skip: int = Query(0, ge=0),
+    limit: int = Query(50, ge=1, le=200),
+    user: User = Depends(require_any),
+    db: AsyncSession = Depends(get_db),
+):
+    products, total = await service.list_products(db, user, skip, limit)
+    return [_enrich(p) for p in products]
+
+
+@router.post("", response_model=ProductResponse, status_code=201)
+async def create_product(
+    body: ProductCreate,
+    user: User = Depends(require_any),
+    db: AsyncSession = Depends(get_db),
+):
+    product = await service.create_product(db, user, body.model_dump())
+    return _enrich(product)
+
+
+@router.get("/{product_id}", response_model=ProductResponse)
+async def get_product(
+    product_id: int,
+    user: User = Depends(require_any),
+    db: AsyncSession = Depends(get_db),
+):
+    product = await service.get_product(db, product_id, user)
+    return _enrich(product)
+
+
+@router.put("/{product_id}", response_model=ProductResponse)
+async def update_product(
+    product_id: int,
+    body: ProductUpdate,
+    user: User = Depends(require_any),
+    db: AsyncSession = Depends(get_db),
+):
+    product = await service.update_product(db, product_id, user, body.model_dump(exclude_unset=True))
+    return _enrich(product)
+
+
+@router.delete("/{product_id}", status_code=204)
+async def delete_product(
+    product_id: int,
+    user: User = Depends(require_any),
+    db: AsyncSession = Depends(get_db),
+):
+    await service.delete_product(db, product_id, user)

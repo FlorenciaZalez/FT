@@ -1,0 +1,50 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --color-primary-rgb: 79 110 247;
+  --color-primary-hover-rgb: 63 94 230;
+  --color-primary-active-rgb: 54 79 204;
+  --color-primary-light-rgb: 238 242 255;
+}
+
+@layer base {
+  body {
+    @apply bg-gray-50 text-gray-900 antialiased;
+  }
+
+  button,
+  a,
+  input,
+  select,
+  textarea {
+    @apply transition;
+  }
+
+  button:focus-visible,
+  a:focus-visible,
+  input:focus-visible,
+  select:focus-visible,
+  textarea:focus-visible {
+    @apply outline-none;
+    box-shadow: 0 0 0 4px rgba(79, 110, 247, 0.2);
+  }
+
+  input,
+  select,
+  textarea {
+    @apply border-gray-200 text-gray-900 placeholder:text-gray-500;
+  }
+}
+
+@layer components {
+  .ui-btn-primary {
+    @apply bg-primary text-white hover:bg-primary-hover active:bg-primary-active active:scale-[0.98] transition-all duration-150 ease-out;
+  }
+
+  .table-scroll-container thead th {
+    @apply sticky top-0 z-10 bg-white;
+  }
+}
+
