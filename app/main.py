@@ -82,22 +82,25 @@ app.include_router(shipping_router, prefix=API_PREFIX)
 # 🔥 AUTO ADMIN (CORREGIDO)
 @app.on_event("startup")
 async def create_admin():
-    email = "florenciarociotrodler@gmail.com"
-    password = "Florencia23"
+    try:
+        email = "florenciarociotrodler@gmail.com"
+        password = "Florencia23"
 
-    async with AsyncSessionLocal() as db:
-        result = await db.execute(select(User).where(User.email == email))
-        existing_user = result.scalar_one_or_none()
+        async with AsyncSessionLocal() as db:
+            result = await db.execute(select(User).where(User.email == email))
+            existing_user = result.scalar_one_or_none()
 
-        if existing_user is None:
-            admin = User(
-                email=email,
-                hashed_password=hash_password(password),
-                full_name="Admin",
-                role=UserRole.admin,
-                client_id=None,
-                is_active=True,
-                zones=None,
-            )
-            db.add(admin)
-            await db.commit()
+            if existing_user is None:
+                admin = User(
+                    email=email,
+                    hashed_password=hash_password(password),
+                    full_name="Admin",
+                    role=UserRole.admin,
+                    client_id=None,
+                    is_active=True,
+                    zones=None,
+                )
+                db.add(admin)
+                await db.commit()
+    except Exception as error:
+        print(f"Error creating admin user on startup: {error}")
