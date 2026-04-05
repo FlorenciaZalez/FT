@@ -25,6 +25,11 @@ class Settings(BaseSettings):
     DEBUG: bool = True
     UPLOADS_DIR: str = "uploads"
 
+    # Initial admin
+    FIRST_SUPERUSER_EMAIL: str = ""
+    FIRST_SUPERUSER_PASSWORD: str = ""
+    FIRST_SUPERUSER_FULL_NAME: str = "Admin"
+
     class Config:
         env_file = ".env"
         extra = "ignore"

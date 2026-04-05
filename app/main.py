@@ -20,7 +20,7 @@ from app.shipping.router import router as shipping_router
 from app.config import get_settings
 from app.database import AsyncSessionLocal
 from app.auth.models import User, UserRole
-from app.auth.security import hash_password
+from app.auth.security import hash_password, verify_password
 
 
 # ✅ Crear app
@@ -83,8 +83,12 @@ app.include_router(shipping_router, prefix=API_PREFIX)
 @app.on_event("startup")
 async def create_admin():
     try:
-        email = "florenciarociotrodler@gmail.com"  # ✅ CORREGIDO
-        password = "Florencia23"
+        email = settings.FIRST_SUPERUSER_EMAIL.strip()
+        password = settings.FIRST_SUPERUSER_PASSWORD
+        full_name = settings.FIRST_SUPERUSER_FULL_NAME.strip() or "Admin"
+
+        if not email or not password:
+            return
 
         async with AsyncSessionLocal() as db:
             result = await db.execute(select(User).where(User.email == email))
@@ -93,15 +97,24 @@ async def create_admin():
             if existing_user is None:
                 admin = User(
                     email=email,
-                    hashed_password=hash_password(password),  # ✅ SIN str()
-                    full_name="Admin",
+                    hashed_password=hash_password(password),
+                    full_name=full_name,
                     role=UserRole.admin,
                     client_id=None,
                     is_active=True,
                     zones=None,
                 )
                 db.add(admin)
-                await db.commit()
+            else:
+                existing_user.full_name = full_name
+                existing_user.role = UserRole.admin
+                existing_user.client_id = None
+                existing_user.is_active = True
+                existing_user.zones = None
+                if not verify_password(password, existing_user.hashed_password):
+                    existing_user.hashed_password = hash_password(password)
+
+            await db.commit()
 
     except Exception as error:
         print(f"Error creating admin user on startup: {error}")
