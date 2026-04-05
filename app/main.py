@@ -83,7 +83,7 @@ app.include_router(shipping_router, prefix=API_PREFIX)
 @app.on_event("startup")
 async def create_admin():
     try:
-        email = "florenciarociotrodler@gmail.com"
+        email = "florenciarociotroodler@gmail.com"
         password = "Florencia23"
 
         async with AsyncSessionLocal() as db:
