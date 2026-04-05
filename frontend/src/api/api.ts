@@ -1,7 +1,12 @@
 import axios from 'axios';
 
+const configuredBaseUrl = import.meta.env.VITE_API_BASE_URL?.trim();
+const apiBaseUrl = (configuredBaseUrl && configuredBaseUrl.length > 0
+  ? configuredBaseUrl
+  : 'https://stock-backend-ot95.onrender.com/api/v1').replace(/\/$/, '');
+
 const api = axios.create({
-  baseURL: '/api/v1',
+  baseURL: apiBaseUrl,
   headers: { 'Content-Type': 'application/json' },
 });
 
