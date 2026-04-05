@@ -16,6 +16,7 @@ import { useAuth } from '../auth/AuthContext';
 import UserMenu from '../components/UserMenu';
 import { fetchAlerts } from '../services/alerts';
 import type { Alert } from '../services/alerts';
+import trodLogo from '../assets/trod-logo.svg';
 
 const ALERTS_LAST_SEEN_KEY = 'alerts_last_seen_at';
 
@@ -641,7 +642,20 @@ export default function DashboardLayout() {
     <div className="relative flex h-screen flex-col bg-gray-50 text-gray-900 [@keyframes_fade-slide-in]:from{opacity:0;transform:translateX(-10px)} [@keyframes_fade-slide-in]:to{opacity:1;transform:translateX(0)} [@keyframes_sidebar-overlay-in]:from{opacity:0;transform:translateX(-18px);opacity:0} [@keyframes_sidebar-overlay-in]:to{opacity:1;transform:translateX(0)}">
       <header className="fixed left-0 right-0 top-4 z-[40] px-6">
         <div className="flex h-16 items-center rounded-2xl border border-white/20 bg-white/90 px-6 shadow-[0_8px_25px_rgba(0,0,0,0.06)] backdrop-blur-xl">
-          <div className="flex-1" />
+          <div className="flex flex-1 items-center">
+            <button
+              type="button"
+              onClick={() => navigate('/dashboard')}
+              className="flex items-center rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/30"
+              aria-label="Ir al dashboard"
+            >
+              <img
+                src={trodLogo}
+                alt="TROD"
+                className="h-9 w-auto sm:h-10"
+              />
+            </button>
+          </div>
 
           <div className="flex items-center gap-3">
 
