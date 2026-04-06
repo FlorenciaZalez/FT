@@ -1,7 +1,6 @@
 import { useState, type FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext';
-import trodLogo from '../assets/trod-logo.svg';
 
 export default function Login() {
   const { login } = useAuth();
@@ -30,7 +29,7 @@ export default function Login() {
       <div className="w-full max-w-md rounded-2xl border border-gray-200 bg-white p-8 shadow-xl">
         <div className="text-center mb-8">
           <img
-            src={trodLogo}
+            src="/logo.svg"
             alt="TROD"
             className="mx-auto mb-5 h-12 w-auto sm:h-14"
           />

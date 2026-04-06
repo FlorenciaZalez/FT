@@ -16,7 +16,6 @@ import { useAuth } from '../auth/AuthContext';
 import UserMenu from '../components/UserMenu';
 import { fetchAlerts } from '../services/alerts';
 import type { Alert } from '../services/alerts';
-import trodLogo from '../assets/trod-logo.svg';
 
 const ALERTS_LAST_SEEN_KEY = 'alerts_last_seen_at';
 
@@ -650,9 +649,9 @@ export default function DashboardLayout() {
               aria-label="Ir al dashboard"
             >
               <img
-                src={trodLogo}
+                src="/favicon.png"
                 alt="TROD"
-                className="h-9 w-auto sm:h-10"
+                className="h-10 w-10 rounded-lg object-contain"
               />
             </button>
           </div>
