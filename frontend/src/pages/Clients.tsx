@@ -9,6 +9,30 @@ type StatusFilter = 'all' | 'active' | 'inactive';
 
 const BILLING_DAY_OPTIONS = Array.from({ length: 31 }, (_, index) => index + 1);
 
+function getApiErrorMessage(error: unknown, fallback: string): string {
+  const detail = (error as { response?: { data?: { detail?: unknown } } })?.response?.data?.detail;
+
+  if (typeof detail === 'string' && detail.trim()) {
+    return detail;
+  }
+
+  if (Array.isArray(detail)) {
+    const messages = detail
+      .map((item) => {
+        if (typeof item === 'string') return item;
+        if (item && typeof item === 'object' && 'msg' in item && typeof item.msg === 'string') return item.msg;
+        return null;
+      })
+      .filter((item): item is string => Boolean(item));
+
+    if (messages.length > 0) {
+      return messages.join('. ');
+    }
+  }
+
+  return fallback;
+}
+
 function formatLastActivity(iso: string | undefined): string {
   if (!iso) return 'Sin actividad';
   const date = new Date(iso);
@@ -94,9 +118,7 @@ export default function Clients() {
       await toggleActive(client.id, client.is_active);
       setConfirmToggle(null);
     } catch (err: unknown) {
-      const msg =
-        (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail ??
-        'Error al cambiar estado';
+      const msg = getApiErrorMessage(err, 'Error al cambiar estado');
       setActionError(msg);
     } finally {
       setActionLoading(null);
@@ -481,9 +503,7 @@ function CreateClientForm({
       });
       onCreated();
     } catch (err: unknown) {
-      const msg =
-        (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail ??
-        'Error al crear cliente';
+      const msg = getApiErrorMessage(err, 'Error al crear cliente');
       setFormError(msg);
     } finally {
       setSaving(false);

@@ -1,4 +1,5 @@
 from sqlalchemy import select, func
+from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.billing.models import BillingSchedule
@@ -7,6 +8,13 @@ from app.orders.models import Order
 from app.products.models import Product
 from app.stock.models import Stock
 from app.common.exceptions import NotFoundError, ConflictError
+
+
+def _client_with_relations():
+    return select(Client).options(
+        selectinload(Client.ml_account),
+        selectinload(Client.billing_schedule),
+    )
 
 
 async def _upsert_billing_schedule(db: AsyncSession, client: Client, day_of_month: int | None) -> None:
@@ -30,13 +38,13 @@ async def list_clients(db: AsyncSession, skip: int = 0, limit: int = 50) -> tupl
     total = total_q.scalar_one()
 
     result = await db.execute(
-        select(Client).order_by(Client.id).offset(skip).limit(limit)
+        _client_with_relations().order_by(Client.id).offset(skip).limit(limit)
     )
     return result.scalars().all(), total
 
 
 async def get_client(db: AsyncSession, client_id: int) -> Client:
-    result = await db.execute(select(Client).where(Client.id == client_id))
+    result = await db.execute(_client_with_relations().where(Client.id == client_id))
     client = result.scalar_one_or_none()
     if client is None:
         raise NotFoundError(f"Client {client_id} not found")
@@ -55,7 +63,7 @@ async def create_client(db: AsyncSession, data: dict) -> Client:
     await db.flush()
     await _upsert_billing_schedule(db, client, billing_day_of_month)
     await db.refresh(client)
-    return client
+    return await get_client(db, client.id)
 
 
 async def update_client(db: AsyncSession, client_id: int, data: dict) -> Client:
@@ -71,7 +79,7 @@ async def update_client(db: AsyncSession, client_id: int, data: dict) -> Client:
         await _upsert_billing_schedule(db, client, billing_day_of_month)
     await db.flush()
     await db.refresh(client)
-    return client
+    return await get_client(db, client.id)
 
 
 async def delete_client(db: AsyncSession, client_id: int) -> None:
