@@ -31,6 +31,9 @@ class BillingScheduleInfo(BaseModel):
     day_of_month: int
     active: bool
 
+    class Config:
+        orm_mode = True
+
 
 class MLAccountInfo(BaseModel):
     ml_user_id: str
