@@ -1,8 +1,10 @@
 from pathlib import Path
 
 from sqlalchemy import select
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.auth.router import router as auth_router
@@ -29,6 +31,26 @@ app = FastAPI(
     description="Sistema multi-tenant de gestión de stock y fulfillment",
     version="0.1.0",
 )
+
+
+def _format_validation_error(exc: RequestValidationError) -> str:
+    messages: list[str] = []
+    for error in exc.errors():
+        location = ".".join(str(part) for part in error.get("loc", []) if part != "body")
+        message = error.get("msg", "Error de validacion")
+        messages.append(f"{location}: {message}" if location else message)
+    return "; ".join(messages) if messages else "Datos invalidos"
+
+
+@app.exception_handler(RequestValidationError)
+async def request_validation_exception_handler(_: Request, exc: RequestValidationError):
+    return JSONResponse(
+        status_code=422,
+        content={
+            "detail": _format_validation_error(exc),
+            "errors": exc.errors(),
+        },
+    )
 
 
 # ✅ Ruta base
