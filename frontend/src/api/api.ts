@@ -1,10 +1,15 @@
 import axios from 'axios';
 
-const configuredBaseUrl = import.meta.env.VITE_API_BASE_URL?.trim();
-const defaultBaseUrl = import.meta.env.DEV ? '/api/v1' : 'https://stock-backend.onrender.com/api/v1';
-const apiBaseUrl = (configuredBaseUrl && configuredBaseUrl.length > 0
-  ? configuredBaseUrl
-  : defaultBaseUrl).replace(/\/$/, '');
+const configuredApiUrl = import.meta.env.VITE_API_URL?.trim();
+
+const normalizeApiBaseUrl = (value: string) => {
+  const sanitizedValue = value.replace(/\/$/, '');
+  return sanitizedValue.endsWith('/api/v1') ? sanitizedValue : `${sanitizedValue}/api/v1`;
+};
+
+const apiBaseUrl = configuredApiUrl && configuredApiUrl.length > 0
+  ? normalizeApiBaseUrl(configuredApiUrl)
+  : '/api/v1';
 
 const api = axios.create({
   baseURL: apiBaseUrl,
