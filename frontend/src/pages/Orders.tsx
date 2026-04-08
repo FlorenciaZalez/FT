@@ -283,6 +283,7 @@ export default function Orders() {
   const { orders, loading, error, add, advance, reload } = useOrders();
   const { user } = useAuth();
   const navigate = useNavigate();
+  const isClient = user?.role === 'client';
   const [isCreatingOrder, setIsCreatingOrder] = useState(false);
   const [statusFilter, setStatusFilter] = useState('');
   const [zoneFilter, setZoneFilter] = useState('');
@@ -325,14 +326,16 @@ export default function Orders() {
   useEffect(() => () => { if (debounceRef.current) clearTimeout(debounceRef.current); }, []);
 
   useEffect(() => {
+    if (isClient) return;
     fetchTransporters(true).then(setDispatchTransporters).catch(() => {});
-  }, []);
+  }, [isClient]);
 
   useEffect(() => {
+    if (isClient) return;
     fetchActiveBatchPickingSession()
       .then((session) => setPreviewBatchSession(session))
       .catch(() => setPreviewBatchSession(null));
-  }, []);
+  }, [isClient]);
 
   // Workload hint polling (operator only)
   const isOperator = user?.role === 'operator';
@@ -436,8 +439,9 @@ export default function Orders() {
   }, [orders, searchQuery]);
 
   useEffect(() => {
+    if (isClient) return;
     fetchStock().then(setStockItems).catch(() => {});
-  }, [orders]);
+  }, [orders, isClient]);
 
   useEffect(() => {
     if (!isCreatingOrder) return;
@@ -649,6 +653,191 @@ export default function Orders() {
       setPrintingOrderId(null);
     }
   };
+
+  if (isClient) {
+    const clientStatusCards = [
+      {
+        label: 'Pendientes',
+        value: filteredOrders.filter((order) => order.status === 'pending').length,
+        tone: 'border-yellow-200 bg-yellow-50 text-yellow-800',
+      },
+      {
+        label: 'En preparación',
+        value: filteredOrders.filter((order) => order.status === 'in_preparation').length,
+        tone: 'border-blue-200 bg-blue-50 text-blue-700',
+      },
+      {
+        label: 'Despachados',
+        value: filteredOrders.filter((order) => order.status === 'dispatched').length,
+        tone: 'border-green-200 bg-green-50 text-green-700',
+      },
+      {
+        label: 'Devoluciones',
+        value: filteredOrders.filter((order) => ['awaiting_return', 'returned_pending_review', 'returned_completed'].includes(order.status)).length,
+        tone: 'border-amber-200 bg-amber-50 text-amber-700',
+      },
+    ];
+
+    return (
+      <div className="flex flex-col gap-6">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">Pedidos</h1>
+          <p className="mt-1 text-sm text-gray-500">Seguimiento visual de tus pedidos con acceso al detalle y estado actual.</p>
+        </div>
+
+        {error && (
+          <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+            {error}
+          </div>
+        )}
+
+        <section className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          {clientStatusCards.map((card) => (
+            <div key={card.label} className={`rounded-xl border px-4 py-4 ${card.tone}`}>
+              <p className="text-xs font-semibold uppercase tracking-[0.22em] opacity-80">{card.label}</p>
+              <p className="mt-2 text-3xl font-bold">{card.value}</p>
+            </div>
+          ))}
+        </section>
+
+        <section className="rounded-2xl border border-gray-200 bg-white p-4">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
+            <div className="relative flex-1">
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-gray-400">🔍</span>
+              <input
+                type="text"
+                value={searchInput}
+                onChange={(event) => handleSearchChange(event.target.value)}
+                placeholder="Buscar por número, producto, destinatario o dirección..."
+                className="w-full rounded-lg border border-gray-200 py-2.5 pl-9 pr-9 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
+              />
+              {searchInput && (
+                <button
+                  type="button"
+                  onClick={() => { setSearchInput(''); setSearchQuery(''); }}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-gray-400 hover:text-gray-600"
+                >
+                  ✕
+                </button>
+              )}
+            </div>
+
+            <select
+              value={statusFilter}
+              onChange={(event) => {
+                setStatusFilter(event.target.value);
+                reload(event.target.value || undefined);
+              }}
+              className="rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="">Todos los estados</option>
+              {Object.entries(STATUS_LABELS).map(([key, value]) => (
+                <option key={key} value={key}>{value}</option>
+              ))}
+            </select>
+
+            <div className="flex items-center gap-2">
+              <input
+                type="date"
+                value={dateFrom}
+                onChange={(event) => setDateFrom(event.target.value)}
+                className="rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-blue-500"
+              />
+              <span className="text-xs text-gray-400">a</span>
+              <input
+                type="date"
+                value={dateTo}
+                onChange={(event) => setDateTo(event.target.value)}
+                className="rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+          </div>
+        </section>
+
+        {loading ? (
+          <div className="py-12 text-center text-gray-500">Cargando pedidos...</div>
+        ) : filteredOrders.length === 0 ? (
+          <div className="rounded-2xl border border-gray-200 bg-white py-14 text-center text-gray-500">
+            No hay pedidos para los filtros seleccionados.
+          </div>
+        ) : (
+          <section className="space-y-3">
+            {filteredOrders.map((order) => {
+              const itemSummary = order.items.slice(0, 2).map((item) => `${item.sku} x${item.quantity}`).join(' · ');
+              const extraItems = Math.max(order.items.length - 2, 0);
+
+              return (
+                <div key={order.id} className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm transition hover:border-blue-200">
+                  <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => navigate(`/orders/${order.id}`)}
+                          className="text-left text-base font-semibold text-blue-700 hover:text-blue-800 hover:underline"
+                        >
+                          {order.order_number}
+                        </button>
+                        <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${MAIN_STATUS_COLORS[order.status] ?? 'bg-gray-50 text-gray-700'}`}>
+                          {MAIN_STATUS_LABELS[order.status] ?? STATUS_LABELS[order.status] ?? order.status}
+                        </span>
+                        <span className="rounded-full bg-gray-100 px-2.5 py-1 text-xs font-medium text-gray-700">
+                          {order.display_operation_type || OPERATION_LABELS[order.operation_type] || order.operation_type}
+                        </span>
+                      </div>
+
+                      <div className="mt-3 grid gap-3 text-sm text-gray-500 sm:grid-cols-2 xl:grid-cols-4">
+                        <div>
+                          <p className="text-xs uppercase tracking-wide text-gray-400">Creado</p>
+                          <p className="mt-1 text-gray-900">{new Date(order.created_at).toLocaleString('es-AR')}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs uppercase tracking-wide text-gray-400">Destinatario</p>
+                          <p className="mt-1 text-gray-900">{order.buyer_name || 'Sin dato'}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs uppercase tracking-wide text-gray-400">Envío</p>
+                          <p className="mt-1 text-gray-900">{order.shipping_id || 'Sin shipping ID'}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs uppercase tracking-wide text-gray-400">Costo logístico</p>
+                          <p className="mt-1 text-gray-900">{order.shipping_cost !== null ? formatCurrency(order.shipping_cost) : 'No calculado'}</p>
+                        </div>
+                      </div>
+
+                      <div className="mt-4 rounded-xl bg-gray-50 px-3 py-3 text-sm text-gray-600">
+                        <p className="font-medium text-gray-900">Productos</p>
+                        <p className="mt-1">
+                          {itemSummary || 'Sin productos cargados'}
+                          {extraItems > 0 ? ` · +${extraItems} más` : ''}
+                        </p>
+                        <p className="mt-2 text-xs text-gray-500">
+                          {[order.address_line || order.buyer_address, order.city, order.state, order.postal_code].filter(Boolean).join(' · ') || 'Sin dirección cargada'}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex shrink-0 items-center gap-3 lg:flex-col lg:items-end">
+                      <span className="rounded-full bg-blue-50 px-3 py-1 text-xs font-medium text-blue-700">
+                        {SOURCE_LABELS[order.source] ?? order.source}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => navigate(`/orders/${order.id}`)}
+                        className="rounded-lg border border-gray-200 px-4 py-2 text-sm font-medium text-gray-900 hover:bg-gray-50"
+                      >
+                        Ver detalle
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </section>
+        )}
+      </div>
+    );
+  }
 
 
 

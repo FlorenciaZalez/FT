@@ -1,4 +1,5 @@
 from sqlalchemy import select, func
+from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.products.models import Product, ProductWeightCategory
@@ -9,6 +10,7 @@ from app.auth.models import User
 from app.common.exceptions import NotFoundError, ConflictError, BadRequestError
 from app.common.permissions import tenant_filter, check_tenant_access
 from app.integrations.mercadolibre import service as mercadolibre_service
+from app.integrations.mercadolibre.models import MLProductMapping
 
 
 _ML_REFERENCE_UNSET = object()
@@ -47,12 +49,22 @@ def _normalize_product_weight_category(
         data["preparation_type"] = _map_weight_category_to_preparation_type(current_weight_category)
 
 
-def _get_direct_ml_mappings(product: Product) -> list:
-    return [
-        mapping
-        for mapping in product.ml_mappings
-        if mapping.is_active and mapping.ml_variation_id is None
-    ]
+def _product_with_relations() -> select:
+    return select(Product).options(
+        selectinload(Product.location),
+        selectinload(Product.ml_mappings),
+    )
+
+
+async def _load_direct_ml_mappings(db: AsyncSession, product_id: int) -> list[MLProductMapping]:
+    result = await db.execute(
+        select(MLProductMapping).where(
+            MLProductMapping.product_id == product_id,
+            MLProductMapping.is_active.is_(True),
+            MLProductMapping.ml_variation_id.is_(None),
+        )
+    )
+    return result.scalars().all()
 
 
 async def _sync_direct_ml_mapping(
@@ -61,7 +73,7 @@ async def _sync_direct_ml_mapping(
     product: Product,
     ml_item_reference: str | None,
 ) -> None:
-    direct_mappings = _get_direct_ml_mappings(product)
+    direct_mappings = await _load_direct_ml_mappings(db, product.id)
     if len(direct_mappings) > 1:
         raise BadRequestError(
             "Este producto tiene multiples mappings simples de MercadoLibre. Gestionarlos desde la pantalla de mappings."
@@ -118,16 +130,19 @@ async def list_products(
 ) -> tuple[list[Product], int]:
     base = select(Product)
     base = tenant_filter(base, Product, user)
+    data_query = tenant_filter(_product_with_relations(), Product, user)
 
     count_q = await db.execute(select(func.count()).select_from(base.subquery()))
     total = count_q.scalar_one()
 
-    result = await db.execute(base.order_by(Product.id).offset(skip).limit(limit))
+    result = await db.execute(
+        data_query.order_by(Product.id).offset(skip).limit(limit)
+    )
     return result.scalars().all(), total
 
 
 async def get_product(db: AsyncSession, product_id: int, user: User) -> Product:
-    result = await db.execute(select(Product).where(Product.id == product_id))
+    result = await db.execute(_product_with_relations().where(Product.id == product_id))
     product = result.scalar_one_or_none()
     if product is None:
         raise NotFoundError(f"Product {product_id} not found")
@@ -165,7 +180,7 @@ async def create_product(db: AsyncSession, user: User, data: dict) -> Product:
     await _sync_direct_ml_mapping(db, user, product, ml_item_reference)
 
     await db.refresh(product)
-    return product
+    return await get_product(db, product.id, user)
 
 
 async def update_product(db: AsyncSession, product_id: int, user: User, data: dict) -> Product:
@@ -185,9 +200,7 @@ async def update_product(db: AsyncSession, product_id: int, user: User, data: di
     if "location_id" in data:
         await _validate_location(db, data["location_id"])
     for key, value in data.items():
-        if key == "location_id":
-            setattr(product, key, value)  # allow None
-        elif value is not None:
+        if key == "location_id" or value is not None:
             setattr(product, key, value)
     await db.flush()
 
@@ -195,7 +208,7 @@ async def update_product(db: AsyncSession, product_id: int, user: User, data: di
         await _sync_direct_ml_mapping(db, user, product, ml_item_reference)
 
     await db.refresh(product)
-    return product
+    return await get_product(db, product.id, user)
 
 
 async def delete_product(db: AsyncSession, product_id: int, user: User) -> None:

@@ -37,6 +37,7 @@ export default function Billing() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const isAdmin = user?.role === 'admin';
+  const isClient = user?.role === 'client';
 
   const [period, setPeriod] = useState(getCurrentPeriod());
   const [preview, setPreview] = useState<BillingPreviewItem[]>([]);
@@ -91,7 +92,7 @@ export default function Billing() {
     [preview],
   );
   const canGenerateDocuments = missingStorageItems.length === 0;
-  const periodStatus = canGenerateDocuments ? 'Listo para facturar' : 'Faltan datos';
+  const periodStatus = canGenerateDocuments ? 'Listo para facturar' : 'Pendiente de revisión';
 
   const totals = useMemo(() => {
     return preview.reduce(
@@ -377,7 +378,9 @@ export default function Billing() {
         <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div>
             <h1 className="text-2xl font-bold text-gray-900">Facturación</h1>
-            <p className="text-sm text-gray-500 mt-1">Estado del período y cierre mensual.</p>
+            <p className="text-sm text-gray-500 mt-1">
+              {isClient ? 'Seguimiento visual del acumulado del período y remitos emitidos.' : 'Estado del período y cierre mensual.'}
+            </p>
           </div>
 
           <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
@@ -390,12 +393,14 @@ export default function Billing() {
                 className="px-4 py-2.5 border border-gray-200 rounded-lg bg-white"
               />
             </div>
-            <button
-              onClick={() => handleRefreshBilling().catch(() => {})}
-              className="px-4 py-2.5 border border-gray-200 rounded-lg text-sm font-medium text-gray-900 hover:bg-gray-50 transition"
-            >
-              Recalcular
-            </button>
+            {isAdmin && (
+              <button
+                onClick={() => handleRefreshBilling().catch(() => {})}
+                className="px-4 py-2.5 border border-gray-200 rounded-lg text-sm font-medium text-gray-900 hover:bg-gray-50 transition"
+              >
+                Recalcular
+              </button>
+            )}
             {isAdmin && (
               <button
                 onClick={() => handleGenerateDocuments().catch(() => {})}
@@ -417,14 +422,14 @@ export default function Billing() {
 
       {successMessage && <SuccessToast message={successMessage} onClose={() => setSuccessMessage('')} />}
 
-      {(missingStorageItems.length > 0 || alerts.due_soon_count > 0 || alerts.overdue_count > 0) && (
+      {((isAdmin && missingStorageItems.length > 0) || alerts.due_soon_count > 0 || alerts.overdue_count > 0) && (
         <section className="rounded-2xl border border-yellow-200 bg-yellow-50 px-5 py-4 sm:px-6">
           <div className="flex items-start gap-3">
             <div className="text-xl leading-none">⚠</div>
             <div className="flex-1">
               <h2 className="text-base font-bold text-yellow-900">Alertas del período</h2>
               <div className="mt-3 space-y-3 text-sm text-yellow-900">
-                {missingStorageItems.length > 0 && (
+                {isAdmin && missingStorageItems.length > 0 && (
                   <div>
                     <p className="font-medium">Falta cargar ocupación manual para {missingStorageItems.length} cliente{missingStorageItems.length !== 1 ? 's' : ''}.</p>
                     <div className="mt-2 flex flex-wrap gap-2">
@@ -454,10 +459,14 @@ export default function Billing() {
       )}
 
       <section className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
-        <SummaryCard label="Total estimado" value={formatCurrency(totals.total)} tone="blue" />
+        <SummaryCard label={isClient ? 'Acumulado a abonar' : 'Total estimado'} value={formatCurrency(totals.total)} tone="blue" />
         <SummaryCard label="Storage manual" value={`${formatNumber(totals.totalM3, 3)} m3`} tone="emerald" />
         <SummaryCard label="Pedidos / remitos" value={`${formatNumber(totals.totalOrders, 0)} / ${formatNumber(documents.length, 0)}`} tone="amber" />
-        <SummaryCard label="Estado del período" value={periodStatus} tone={canGenerateDocuments ? 'emerald' : 'rose'} />
+        <SummaryCard
+          label={isClient ? 'Remitos emitidos' : 'Estado del período'}
+          value={isClient ? formatNumber(documents.length, 0) : periodStatus}
+          tone={isClient ? 'blue' : canGenerateDocuments ? 'emerald' : 'rose'}
+        />
       </section>
 
       {isAdmin && (
@@ -571,7 +580,7 @@ export default function Billing() {
                   <th className="text-right px-4 py-3 font-medium text-gray-500">Pedidos despachados</th>
                   <th className="text-right px-4 py-3 font-medium text-gray-500">Descargas</th>
                   <th className="text-right px-4 py-3 font-medium text-gray-500">Cargos manuales</th>
-                  <th className="text-left px-4 py-3 font-medium text-gray-500">Estado</th>
+                  {!isClient && <th className="text-left px-4 py-3 font-medium text-gray-500">Estado</th>}
                   <th className="text-right px-6 py-3 font-medium text-gray-500">Total</th>
                   {isAdmin && <th className="text-right px-6 py-3 font-medium text-gray-500">Acción</th>}
                 </tr>
@@ -590,18 +599,20 @@ export default function Billing() {
                             <span className="text-gray-400">{isExpanded ? '▾' : '▸'}</span>
                             <div>
                               <div className="font-medium text-gray-900">{item.client_name}</div>
-                              <div className="text-xs text-gray-500 mt-1">{item.missing_storage ? 'Detalle disponible, faltan datos para facturar' : 'Detalle disponible'}</div>
+                              <div className="text-xs text-gray-500 mt-1">Detalle disponible</div>
                             </div>
                           </div>
                         </td>
                         <td className="px-4 py-4 text-right text-gray-500">{formatNumber(toFiniteNumber(item.total_orders), 0)}</td>
                         <td className="px-4 py-4 text-right text-gray-500">{formatCurrency(toFiniteNumber(item.truck_unloading_amount))}</td>
                         <td className={`px-4 py-4 text-right ${toFiniteNumber(item.manual_charge_amount) < 0 ? 'text-red-700' : 'text-gray-500'}`}>{formatCurrency(toFiniteNumber(item.manual_charge_amount))}</td>
-                        <td className="px-4 py-4">
-                          <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ${item.missing_storage ? 'bg-yellow-50 text-yellow-800' : 'bg-green-50 text-green-700'}`}>
-                            {item.missing_storage ? 'Faltan datos' : 'Listo'}
-                          </span>
-                        </td>
+                        {!isClient && (
+                          <td className="px-4 py-4">
+                            <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ${item.missing_storage ? 'bg-yellow-50 text-yellow-800' : 'bg-green-50 text-green-700'}`}>
+                              {item.missing_storage ? 'Faltan datos' : 'Listo'}
+                            </span>
+                          </td>
+                        )}
                         <td className="px-6 py-4 text-right font-semibold text-gray-900">{formatCurrency(toFiniteNumber(item.total))}</td>
                         {isAdmin && (
                           <td className="px-6 py-4 text-right">
@@ -621,13 +632,13 @@ export default function Billing() {
                       </tr>
                       {isExpanded && (
                         <tr className="border-b border-gray-200 bg-gray-50 last:border-b-0">
-                          <td colSpan={isAdmin ? 7 : 6} className="px-6 py-5">
+                          <td colSpan={isAdmin ? 7 : isClient ? 5 : 6} className="px-6 py-5">
                             <div className="grid grid-cols-1 xl:grid-cols-[1.2fr_0.8fr] gap-5">
                               <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
                                 <DetailMetricCard
                                   label="Storage"
                                   value={formatCurrency(toFiniteNumber(item.storage_amount))}
-                                  note={item.missing_storage ? 'Pendiente de carga manual' : `${formatNumber(toFiniteNumber(item.total_m3), 3)} m3 · Base ${formatCurrency(toFiniteNumber(item.storage_base_rate))}`}
+                                  note={`${formatNumber(toFiniteNumber(item.total_m3), 3)} m3 · Base ${formatCurrency(toFiniteNumber(item.storage_base_rate))}`}
                                 />
                                 <DetailMetricCard
                                   label="Preparación"
@@ -671,7 +682,7 @@ export default function Billing() {
                                   <div className="text-3xl font-bold text-gray-900 mt-2">{formatCurrency(toFiniteNumber(item.total))}</div>
                                   <div className="mt-3 space-y-2 text-sm text-gray-500">
                                     <p>Pedidos despachados: <span className="font-medium text-gray-900">{formatNumber(toFiniteNumber(item.total_orders), 0)}</span></p>
-                                    <p>Estado: <span className={`font-medium ${item.missing_storage ? 'text-yellow-800' : 'text-green-700'}`}>{item.missing_storage ? 'Faltan datos' : 'Listo para facturar'}</span></p>
+                                    {!isClient && <p>Estado: <span className={`font-medium ${item.missing_storage ? 'text-yellow-800' : 'text-green-700'}`}>{item.missing_storage ? 'Faltan datos' : 'Listo para facturar'}</span></p>}
                                   </div>
                                 </div>
                                 <div className="rounded-2xl border border-gray-200 bg-white p-4">
@@ -712,7 +723,7 @@ export default function Billing() {
         <div className="px-6 py-4 border-b border-gray-200 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div>
             <h2 className="text-lg font-bold text-gray-900">Remitos generados</h2>
-            <p className="text-sm text-gray-500 mt-1">Listado por cliente con estado, vencimiento y acción de cobro.</p>
+            <p className="text-sm text-gray-500 mt-1">{isClient ? 'Tus remitos emitidos y el total actualmente acumulado.' : 'Listado por cliente con estado, vencimiento y acción de cobro.'}</p>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 w-full lg:w-auto">
@@ -760,7 +771,7 @@ export default function Billing() {
                   <th className="text-right px-4 py-3 font-medium text-gray-500">Total</th>
                   <th className="text-left px-4 py-3 font-medium text-gray-500">Vencimiento</th>
                   <th className="text-left px-4 py-3 font-medium text-gray-500">Estado</th>
-                  <th className="text-right px-6 py-3 font-medium text-gray-500">Acciones</th>
+                  {isAdmin && <th className="text-right px-6 py-3 font-medium text-gray-500">Acciones</th>}
                 </tr>
               </thead>
               <tbody>
@@ -778,25 +789,27 @@ export default function Billing() {
                     <td className="px-4 py-4">
                       <DocumentStatusBadge status={document.status} />
                     </td>
-                    <td className="px-6 py-4">
-                      <div className="flex justify-end gap-2">
-                        {isAdmin && document.status !== 'paid' && (
+                    {isAdmin && (
+                      <td className="px-6 py-4">
+                        <div className="flex justify-end gap-2">
+                          {document.status !== 'paid' && (
+                            <button
+                              onClick={() => handleMarkPaid(document.id).catch(() => {})}
+                              disabled={markingPaidId === document.id}
+                              className="px-3 py-1.5 text-xs font-medium text-green-700 bg-green-50 rounded-lg hover:bg-green-100 transition disabled:opacity-50"
+                            >
+                              {markingPaidId === document.id ? 'Procesando...' : 'Marcar como pagado'}
+                            </button>
+                          )}
                           <button
-                            onClick={() => handleMarkPaid(document.id).catch(() => {})}
-                            disabled={markingPaidId === document.id}
-                            className="px-3 py-1.5 text-xs font-medium text-green-700 bg-green-50 rounded-lg hover:bg-green-100 transition disabled:opacity-50"
+                            onClick={() => navigate('/billing/history')}
+                            className="px-3 py-1.5 text-xs font-medium text-gray-900 bg-gray-50 rounded-lg hover:bg-gray-200 transition"
                           >
-                            {markingPaidId === document.id ? 'Procesando...' : 'Marcar como pagado'}
+                            Ver cobros
                           </button>
-                        )}
-                        <button
-                          onClick={() => navigate('/billing/history')}
-                          className="px-3 py-1.5 text-xs font-medium text-gray-900 bg-gray-50 rounded-lg hover:bg-gray-200 transition"
-                        >
-                          Ver cobros
-                        </button>
-                      </div>
-                    </td>
+                        </div>
+                      </td>
+                    )}
                   </tr>
                 ))}
               </tbody>

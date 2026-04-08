@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { fetchOrder, advanceOrder, cancelOrder, generateManualLabel, markOrderAwaitingReturn, printOrderLabel, type Order } from '../services/orders';
 import SuccessToast from '../components/SuccessToast';
+import { useAuth } from '../auth/AuthContext';
 
 const STATUS_LABELS: Record<string, string> = {
   pending: 'Pendiente',
@@ -70,6 +71,8 @@ const STATUS_STEPS = ['pending', 'in_preparation', 'prepared', 'dispatched', 'aw
 export default function OrderDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const { user } = useAuth();
+  const isClient = user?.role === 'client';
   const [order, setOrder] = useState<Order | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -243,7 +246,7 @@ export default function OrderDetail() {
           </p>
         </div>
 
-        <div className="flex gap-3">
+        {!isClient && <div className="flex gap-3">
           {order.status === 'pending' && !isUnmappedMarketplaceOrder && (
             <button
               onClick={() => setShowPickingConfirm(true)}
@@ -313,25 +316,25 @@ export default function OrderDetail() {
               Cancelar pedido
             </button>
           )}
-        </div>
+        </div>}
       </div>
 
       {/* Messages */}
-      {actionError && (
+      {!isClient && actionError && (
         <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg p-3 mb-4">{actionError}</div>
       )}
-      {order.source === 'manual' && order.label_generated && order.label_type === 'manual' && (
+      {!isClient && order.source === 'manual' && order.label_generated && order.label_type === 'manual' && (
         <div className="bg-green-50 border border-green-200 text-green-700 text-sm rounded-lg p-3 mb-4">
           Etiqueta ya generada anteriormente. Podés reimprimirla desde este pedido.
         </div>
       )}
-      {isUnmappedMarketplaceOrder && (
+      {!isClient && isUnmappedMarketplaceOrder && (
         <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg p-3 mb-4">
           Este pedido ingresó desde MercadoLibre sin un SKU interno asociado. Debe resolverse desde la pantalla de mappings antes de iniciar el picking.
         </div>
       )}
 
-      {successMsg && <SuccessToast message={successMsg} onClose={() => setSuccessMsg('')} />}
+      {!isClient && successMsg && <SuccessToast message={successMsg} onClose={() => setSuccessMsg('')} />}
 
       {/* Status progress */}
       {order.status !== 'cancelled' && currentStepIdx >= 0 && (
@@ -550,7 +553,7 @@ export default function OrderDetail() {
       </div>
 
       {/* Cancel Confirm Modal */}
-      {showCancelConfirm && canCancel && (
+      {!isClient && showCancelConfirm && canCancel && (
         <div className="fixed inset-0 bg-text-blue-700/40 flex items-center justify-center z-50">
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6">
             <h3 className="text-lg font-bold text-gray-900 mb-1">Cancelar pedido</h3>
@@ -586,7 +589,7 @@ export default function OrderDetail() {
       )}
 
       {/* Picking Confirm Modal */}
-      {showPickingConfirm && order.status === 'pending' && (
+      {!isClient && showPickingConfirm && order.status === 'pending' && (
         <div className="fixed inset-0 bg-text-blue-700/40 flex items-center justify-center z-50">
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6">
             <h3 className="text-lg font-bold text-gray-900 mb-1">Iniciar picking</h3>

@@ -8,6 +8,7 @@ import {
   Plug,
   Receipt,
   Settings,
+  ShoppingBag,
   Truck,
   Users,
   type LucideIcon,
@@ -416,7 +417,34 @@ export default function DashboardLayout() {
     },
   ];
 
-  const visibleMenu = menu
+  const clientMenu: SidebarEntry[] = [
+    {
+      type: 'item',
+      key: 'dashboard',
+      label: 'Dashboard',
+      path: '/dashboard',
+      icon: LayoutDashboard,
+      badge: alertNoticeCount > 0 ? { value: alertNoticeCount, tone: 'warning' } : undefined,
+    },
+    {
+      type: 'item',
+      key: 'stock',
+      label: 'Stock',
+      path: '/stock',
+      icon: Boxes,
+    },
+    {
+      type: 'item',
+      key: 'pedidos',
+      label: 'Pedidos',
+      path: '/orders',
+      icon: ShoppingBag,
+    },
+  ];
+
+  const baseMenu = user?.role === 'client' ? clientMenu : menu;
+
+  const visibleMenu = baseMenu
     .map((entry) => {
       if (entry.type === 'item') {
         return entry.adminOnly && user?.role !== 'admin' ? null : entry;

@@ -111,6 +111,7 @@ function getProductSearchRank(product: Product, query: string): number {
 export default function StockPage() {
   const { user } = useAuth();
   const isAdmin = user?.role === 'admin';
+  const isClient = user?.role === 'client';
   const [searchParams, setSearchParams] = useSearchParams();
   const searchFilter = searchParams.get('search') ?? '';
   const clientFilter = searchParams.get('clientId') ?? '';
@@ -148,9 +149,11 @@ export default function StockPage() {
 
   useEffect(() => {
     fetchProducts().then(setProducts).catch(() => {});
-    fetchClients().then(setClients).catch(() => {});
+    if (!isClient) {
+      fetchClients().then(setClients).catch(() => {});
+    }
     fetchStockMovements().then(setMovements).catch(() => {});
-  }, []);
+  }, [isClient]);
 
   useEffect(() => {
     if (!isAdmin) return;
@@ -310,10 +313,13 @@ export default function StockPage() {
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Stock</h1>
           <p className="text-gray-500 text-sm mt-1">
-            Stock actual por producto. Los cambios se realizan mediante movimientos.
+            {isClient
+              ? 'Vista de stock en tiempo real. Solo lectura para seguimiento del cliente.'
+              : 'Stock actual por producto. Los cambios se realizan mediante movimientos.'}
           </p>
         </div>
-        <div className="flex gap-3">
+        {!isClient && (
+          <div className="flex gap-3">
           <button
             onClick={() => setShowBulkEntry((current) => !current)}
             className={`px-4 py-2 rounded-lg border text-sm font-medium transition flex items-center gap-1.5 ${
@@ -337,7 +343,8 @@ export default function StockPage() {
           >
             <span className="text-lg leading-none">&minus;</span> Retirar stock
           </button>
-        </div>
+          </div>
+        )}
       </div>
 
       {/* Success message */}
@@ -437,7 +444,7 @@ export default function StockPage() {
         </section>
       )}
 
-      {showBulkEntry && (
+      {!isClient && showBulkEntry && (
         <BulkStockEntryPanel
           products={products}
           clients={clients}
@@ -462,6 +469,7 @@ export default function StockPage() {
               className="w-full rounded-lg border border-gray-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
             />
           </div>
+          {!isClient && (
           <div className="min-w-[220px]">
             <label className="block text-xs font-medium text-gray-500 uppercase mb-1.5">Cliente</label>
             <select
@@ -475,6 +483,7 @@ export default function StockPage() {
               ))}
             </select>
           </div>
+          )}
           <div className="min-w-[190px]">
             <label className="block text-xs font-medium text-gray-500 uppercase mb-1.5">Estado</label>
             <select
@@ -504,9 +513,11 @@ export default function StockPage() {
       ) : items.length === 0 && !hasActiveFilters ? (
         <div className="text-center py-16">
           <p className="text-gray-500 text-lg mb-2">No hay stock registrado</p>
-          <p className="text-gray-500 text-sm">
-            Usá el botón <strong>"+ Ingresar stock"</strong> para agregar mercadería.
-          </p>
+          {!isClient && (
+            <p className="text-gray-500 text-sm">
+              Usá el botón <strong>"+ Ingresar stock"</strong> para agregar mercadería.
+            </p>
+          )}
         </div>
       ) : items.length === 0 ? (
         <div className="text-center py-16">
@@ -730,18 +741,22 @@ export default function StockPage() {
               </div>
 
               <div className="flex gap-3">
-                <button
-                  onClick={() => { setSelectedProductId(null); openInModal(selectedProductId); }}
-                  className="flex-1 bg-green-600 text-white px-4 py-2.5 rounded-lg text-sm font-medium hover:opacity-90 transition flex items-center justify-center gap-1.5"
-                >
-                  <span className="text-lg leading-none">+</span> Ingresar
-                </button>
-                <button
-                  onClick={() => { setSelectedProductId(null); openOutModal(selectedProductId); }}
-                  className="flex-1 bg-red-600 text-white px-4 py-2.5 rounded-lg text-sm font-medium hover:opacity-90 transition flex items-center justify-center gap-1.5"
-                >
-                  <span className="text-lg leading-none">&minus;</span> Retirar
-                </button>
+                {!isClient && (
+                  <>
+                    <button
+                      onClick={() => { setSelectedProductId(null); openInModal(selectedProductId); }}
+                      className="flex-1 bg-green-600 text-white px-4 py-2.5 rounded-lg text-sm font-medium hover:opacity-90 transition flex items-center justify-center gap-1.5"
+                    >
+                      <span className="text-lg leading-none">+</span> Ingresar
+                    </button>
+                    <button
+                      onClick={() => { setSelectedProductId(null); openOutModal(selectedProductId); }}
+                      className="flex-1 bg-red-600 text-white px-4 py-2.5 rounded-lg text-sm font-medium hover:opacity-90 transition flex items-center justify-center gap-1.5"
+                    >
+                      <span className="text-lg leading-none">&minus;</span> Retirar
+                    </button>
+                  </>
+                )}
                 <button
                   onClick={() => { setSelectedProductId(null); setHistoryProductId(selectedProductId); }}
                   className="flex-1 border border-gray-200 text-gray-900 px-4 py-2.5 rounded-lg text-sm font-medium hover:bg-gray-50 transition"
