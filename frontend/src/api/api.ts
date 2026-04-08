@@ -1,9 +1,10 @@
 import axios from 'axios';
 
 const configuredBaseUrl = import.meta.env.VITE_API_BASE_URL?.trim();
+const defaultBaseUrl = import.meta.env.DEV ? '/api/v1' : 'https://stock-backend.onrender.com/api/v1';
 const apiBaseUrl = (configuredBaseUrl && configuredBaseUrl.length > 0
   ? configuredBaseUrl
-  : 'https://stock-backend-ot95.onrender.com/api/v1').replace(/\/$/, '');
+  : defaultBaseUrl).replace(/\/$/, '');
 
 const api = axios.create({
   baseURL: apiBaseUrl,

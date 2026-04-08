@@ -1,7 +1,14 @@
+databases:
+  - name: stock-db
+    databaseName: stock_db
+    user: stock_user
+    plan: basic-256mb
+    region: oregon
+
 services:
   - type: web
     runtime: python
-    name: stock-backend-ot95
+    name: stock-backend
     rootDir: .
     buildCommand: pip install -r requirements.txt
     startCommand: alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port $PORT
@@ -52,7 +59,7 @@ services:
     autoDeploy: true
     envVars:
       - key: VITE_API_BASE_URL
-        value: https://stock-backend-ot95.onrender.com/api/v1
+        value: https://stock-backend.onrender.com/api/v1
     routes:
       - type: rewrite
         source: /*
