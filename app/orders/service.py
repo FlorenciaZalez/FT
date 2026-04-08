@@ -8,8 +8,9 @@ from datetime import datetime, timezone
 from sqlalchemy import select, func, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload, joinedload
-from pypdf import PdfReader, PdfWriter
+from pypdf import PageObject, PdfReader, PdfWriter, Transformation
 import qrcode
+from reportlab.lib.units import mm
 from reportlab.lib.units import inch
 from reportlab.lib.utils import ImageReader
 from reportlab.pdfgen import canvas
@@ -51,6 +52,7 @@ BATCH_PICKING_STATUS_ACTIVE = "active"
 BATCH_PICKING_STATUS_COMPLETED = "completed"
 MAX_ML_SHIPMENT_LABELS_PER_REQUEST = 50
 RETURN_REVIEW_LOCATION_CODE = "RET-REVIEW"
+MERCADOLIBRE_LABEL_PAGE_SIZE = (100 * mm, 150 * mm)
 MANUAL_LABEL_PAGE_SIZE = (4 * inch, 6 * inch)
 
 
@@ -358,6 +360,41 @@ def _merge_pdf_documents(pdf_documents: list[bytes]) -> bytes:
 
     if len(writer.pages) == 0:
         raise BadRequestError("No se pudo construir el PDF de etiquetas")
+
+    output = BytesIO()
+    writer.write(output)
+    return output.getvalue()
+
+
+def _normalize_pdf_page_size(pdf_content: bytes, target_size: tuple[float, float]) -> bytes:
+    target_width, target_height = target_size
+    reader = PdfReader(BytesIO(pdf_content))
+    writer = PdfWriter()
+
+    for page in reader.pages:
+        source_width = float(page.mediabox.width)
+        source_height = float(page.mediabox.height)
+
+        if source_width <= 0 or source_height <= 0:
+            continue
+
+        scale = min(target_width / source_width, target_height / source_height)
+        offset_x = (target_width - (source_width * scale)) / 2
+        offset_y = (target_height - (source_height * scale)) / 2
+
+        normalized_page = PageObject.create_blank_page(
+            writer,
+            width=target_width,
+            height=target_height,
+        )
+        normalized_page.merge_transformed_page(
+            page,
+            Transformation().scale(scale, scale).translate(offset_x, offset_y),
+        )
+        writer.add_page(normalized_page)
+
+    if len(writer.pages) == 0:
+        raise BadRequestError("No se pudo normalizar el PDF de etiquetas")
 
     output = BytesIO()
     writer.write(output)
@@ -694,7 +731,10 @@ async def _generate_order_labels_pdf(
         detail = failed_messages[0] if failed_messages else "Mercado Libre no devolvió ninguna etiqueta imprimible"
         raise BadRequestError(f"No se pudo generar ninguna etiqueta. {detail}")
 
-    combined_pdf = _merge_pdf_documents(pdf_documents)
+    combined_pdf = _normalize_pdf_page_size(
+        _merge_pdf_documents(pdf_documents),
+        MERCADOLIBRE_LABEL_PAGE_SIZE,
+    )
     printed_at = datetime.now(timezone.utc)
     _mark_orders_as_label_printed(successful_orders, printed_at, OrderLabelType.external)
     await db.flush()

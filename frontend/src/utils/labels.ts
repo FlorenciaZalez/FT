@@ -15,10 +15,10 @@ export type LabelGenerationResult = {
   blobUrl: string;
 };
 
-const LABEL_WIDTH_MM = 50;
+const LABEL_WIDTH_MM = 40;
 const LABEL_HEIGHT_MM = 30;
-const LABEL_BARCODE_WIDTH_MM = 42;
-const LABEL_BARCODE_HEIGHT_MM = 11.5;
+const LABEL_BARCODE_WIDTH_MM = 34;
+const LABEL_BARCODE_HEIGHT_MM = 10;
 
 function getCssTokenValue(tokenName: string, fallback?: string): string {
   const value = window.getComputedStyle(document.documentElement).getPropertyValue(tokenName).trim();
@@ -186,7 +186,7 @@ function buildPrintDocument(labels: LabelProduct[]): string {
       }
 
       @page {
-        size: 50mm 30mm;
+        size: 40mm 30mm;
         margin: 0;
       }
 
@@ -245,8 +245,8 @@ function buildPrintDocument(labels: LabelProduct[]): string {
       }
 
       .label {
-        width: 50mm;
-        height: 30mm;
+        width: var(--label-width);
+        height: var(--label-height);
         display: flex;
         flex-direction: column;
         align-items: center;
@@ -276,7 +276,7 @@ function buildPrintDocument(labels: LabelProduct[]): string {
       }
 
       .label__sku {
-        width: 44mm;
+        width: 36mm;
         text-align: center;
         font-family: "Courier New", monospace;
         font-size: 2.7mm;
@@ -317,7 +317,7 @@ function buildPrintDocument(labels: LabelProduct[]): string {
   <body>
     <div class="preview-root">
       <div class="preview-toolbar">
-        <span>Vista previa de etiqueta 50 mm x 30 mm</span>
+        <span>Vista previa de etiqueta 40 mm x 30 mm</span>
         <span>Imprimiendo...</span>
       </div>
       <div class="preview-scale">
