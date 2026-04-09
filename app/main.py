@@ -6,6 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
+import app.models  # noqa: F401
 from app.admin_seed_router import router as admin_seed_router
 from app.auth.router import router as auth_router
 from app.clients.router import router as clients_router
