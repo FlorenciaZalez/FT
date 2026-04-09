@@ -3,10 +3,11 @@ from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError, ProgrammingError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+import app.models  # noqa: F401
 from app.auth.models import User, UserRole
 from app.auth.security import hash_password, verify_password
 from app.config import get_settings
-from app.database import get_db
+from app.database import Base, engine, get_db
 
 router = APIRouter(tags=["Admin Seed"])
 settings = get_settings()
@@ -19,6 +20,9 @@ async def create_admin(db: AsyncSession = Depends(get_db)):
     full_name = settings.FIRST_SUPERUSER_FULL_NAME.strip() or "Admin"
 
     try:
+        async with engine.begin() as connection:
+            await connection.run_sync(lambda sync_connection: Base.metadata.create_all(bind=sync_connection))
+
         result = await db.execute(select(User).where(User.email == email))
         existing_user = result.scalar_one_or_none()
 
