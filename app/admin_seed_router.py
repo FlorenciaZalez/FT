@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError, ProgrammingError
 from sqlalchemy.ext.asyncio import AsyncSession
+import traceback
 
 import app.models  # noqa: F401
 from app.auth.models import User, UserRole
@@ -57,13 +58,15 @@ async def create_admin(db: AsyncSession = Depends(get_db)):
         return {"message": "admin creado"}
     except ProgrammingError as error:
         await db.rollback()
+        traceback.print_exc()
         raise HTTPException(
             status_code=500,
-            detail="La tabla de usuarios no esta disponible en la base de datos",
+            detail=f"ProgrammingError: {str(error)}",
         ) from error
     except SQLAlchemyError as error:
         await db.rollback()
+        traceback.print_exc()
         raise HTTPException(
             status_code=500,
-            detail="No se pudo crear el usuario administrador",
+            detail=f"SQLAlchemyError: {str(error)}",
         ) from error
