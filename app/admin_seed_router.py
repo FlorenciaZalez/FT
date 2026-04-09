@@ -10,7 +10,7 @@ from app.database import get_db
 router = APIRouter(tags=["Admin Seed"])
 
 
-@router.post("/create-admin")
+@router.get("/create-admin")
 async def create_admin(db: AsyncSession = Depends(get_db)):
     email = "admin@trod.com"
     password = "123456"
