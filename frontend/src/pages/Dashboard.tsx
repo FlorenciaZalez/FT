@@ -371,6 +371,8 @@ export default function Dashboard() {
             helper: `${clientSnapshot.lowStockProducts} con alerta baja`,
             icon: Boxes,
             accent: 'text-[#7E00D5]',
+            cardClass: 'border-violet-200 bg-violet-50',
+            iconClass: 'bg-violet-600 text-white',
             link: '/stock',
           },
           {
@@ -380,6 +382,8 @@ export default function Dashboard() {
             helper: `${clientSnapshot.readyOrders} listos`,
             icon: PackageCheck,
             accent: 'text-blue-700',
+            cardClass: 'border-blue-200 bg-blue-50',
+            iconClass: 'bg-blue-600 text-white',
           },
           {
             label: 'Enviados hoy',
@@ -388,6 +392,8 @@ export default function Dashboard() {
             helper: clientSnapshot.openAlerts > 0 ? `${clientSnapshot.openAlerts} alertas activas` : 'Sin alertas',
             icon: Truck,
             accent: clientSnapshot.openAlerts > 0 ? 'text-amber-700' : 'text-blue-700',
+            cardClass: 'border-cyan-200 bg-cyan-50',
+            iconClass: 'bg-cyan-600 text-white',
           },
           {
             label: 'Stock reservado',
@@ -396,6 +402,8 @@ export default function Dashboard() {
             helper: `${clientSnapshot.outOfStockProducts} sin stock`,
             icon: AlertTriangle,
             accent: 'text-gray-700',
+            cardClass: 'border-slate-200 bg-slate-100',
+            iconClass: 'bg-slate-700 text-white',
             link: '/stock',
           },
         ]
@@ -403,22 +411,19 @@ export default function Dashboard() {
 
     return (
       <div className="space-y-5">
-        <section className="relative overflow-hidden rounded-2xl border border-gray-200 bg-white px-5 py-5 shadow-sm sm:px-6 sm:py-6">
-          <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(26,170,245,0.16),transparent_34%),radial-gradient(circle_at_top_right,rgba(126,0,213,0.12),transparent_28%)]" />
-          <div className="pointer-events-none absolute inset-x-0 top-0 h-24 bg-gradient-to-r from-[rgba(126,0,213,0.08)] via-transparent to-[rgba(26,170,245,0.10)]" />
-
-          <div className="relative space-y-5">
+        <section className="rounded-2xl border border-gray-200 bg-white px-5 py-5 shadow-sm sm:px-6 sm:py-6">
+          <div className="space-y-5">
             <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
               <div>
                 <div className="flex items-center gap-3 text-xs font-semibold uppercase tracking-[0.24em] text-gray-500">
                   <span className="h-2.5 w-2.5 rounded-full bg-[#7E00D5]" />
                   Dashboard en vivo
                 </div>
-                <h1 className="mt-3 bg-gradient-to-r from-[#7E00D5] via-[#3F63E8] to-[#1AAAF5] bg-clip-text text-2xl font-bold tracking-tight text-transparent sm:text-[2rem]">Resumen rápido de tu operación.</h1>
+                <h1 className="mt-3 text-2xl font-bold tracking-tight text-[#3F63E8] sm:text-[2rem]">Resumen rápido de tu operación.</h1>
                 <p className="mt-1 text-sm text-gray-500">Stock, movimiento y facturación en una sola vista.</p>
               </div>
 
-              <div className="flex items-center gap-3 self-start rounded-xl border border-[rgba(126,0,213,0.10)] bg-gradient-to-r from-[rgba(126,0,213,0.05)] to-[rgba(26,170,245,0.07)] px-4 py-2.5">
+              <div className="flex items-center gap-3 self-start rounded-xl border border-gray-200 bg-white px-4 py-2.5">
                 <div>
                   <p className="text-xs uppercase tracking-[0.22em] text-gray-400">Actualizado</p>
                   <p className="mt-1 text-sm font-medium text-gray-900">{formatClock(clientLastUpdatedAt)}</p>
@@ -442,19 +447,18 @@ export default function Dashboard() {
                   <div
                     key={card.label}
                     onClick={isInteractive ? () => navigate(card.link as string) : undefined}
-                    className={`group relative overflow-hidden rounded-xl border border-[rgba(126,0,213,0.10)] bg-gradient-to-br from-white via-[rgba(126,0,213,0.04)] to-[rgba(26,170,245,0.08)] p-4 text-left transition ${isInteractive ? 'cursor-pointer hover:border-[rgba(31,43,204,0.18)] hover:shadow-sm' : ''}`}
+                    className={`group rounded-xl border p-4 text-left transition ${card.cardClass} ${isInteractive ? 'cursor-pointer hover:shadow-sm' : ''}`}
                   >
-                    <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(135deg,rgba(126,0,213,0.02),transparent_40%,rgba(26,170,245,0.06))] opacity-80 transition group-hover:opacity-100" />
-                    <div className="relative flex items-start justify-between gap-3">
-                      <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-[#7E00D5] to-[#1AAAF5] text-white shadow-[0_10px_24px_rgba(31,43,204,0.18)]">
+                    <div className="flex items-start justify-between gap-3">
+                      <span className={`flex h-10 w-10 items-center justify-center rounded-xl shadow-sm ${card.iconClass}`}>
                         <Icon size={18} />
                       </span>
-                      {isInteractive ? <ArrowUpRight size={16} className="text-[#3F63E8]" /> : <span className="h-4 w-4" />}
+                      {isInteractive ? <ArrowUpRight size={16} className="text-gray-500" /> : <span className="h-4 w-4" />}
                     </div>
-                    <p className="relative mt-4 text-sm text-gray-500">{card.label}</p>
-                    <p className="relative mt-1 text-4xl font-semibold leading-none tracking-tight text-gray-900">{card.value}</p>
-                    <p className={`relative mt-2 text-sm font-medium ${card.accent}`}>{card.detail}</p>
-                    <p className="relative mt-0.5 text-xs text-gray-500">{card.helper}</p>
+                    <p className="mt-4 text-sm text-gray-600">{card.label}</p>
+                    <p className="mt-1 text-4xl font-semibold leading-none tracking-tight text-gray-900">{card.value}</p>
+                    <p className={`mt-2 text-sm font-medium ${card.accent}`}>{card.detail}</p>
+                    <p className="mt-0.5 text-xs text-gray-600">{card.helper}</p>
                   </div>
                 );
               })}
@@ -476,7 +480,7 @@ export default function Dashboard() {
                       <div key={item.key} className="flex flex-1 flex-col items-center gap-2">
                         <div className="flex h-full w-full items-end rounded-2xl bg-gray-100 p-1">
                           <div
-                            className={`w-full rounded-xl ${item.value > 0 ? 'bg-gradient-to-t from-[#7E00D5] to-[#1AAAF5] shadow-[0_8px_20px_rgba(31,43,204,0.18)]' : 'bg-gray-200'}`}
+                            className={`w-full rounded-xl ${item.value > 0 ? 'bg-[#5B6CF0]' : 'bg-gray-200'}`}
                             style={{ height }}
                           />
                         </div>
@@ -559,8 +563,8 @@ export default function Dashboard() {
           </div>
         </section>
 
-        <div className="overflow-hidden rounded-xl border border-[rgba(126,0,213,0.10)] bg-white shadow-sm">
-          <div className="flex items-center justify-between gap-3 border-b border-[rgba(126,0,213,0.08)] bg-gradient-to-r from-[rgba(126,0,213,0.06)] to-[rgba(26,170,245,0.08)] px-4 py-3">
+        <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
+          <div className="flex items-center justify-between gap-3 border-b border-gray-200 bg-white px-4 py-3">
             <div className="flex items-center gap-2">
               <span className="text-lg">🛒</span>
               <h2 className="text-sm font-bold text-gray-900">Mercado Libre</h2>
