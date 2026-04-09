@@ -4,28 +4,41 @@ from sqlalchemy.exc import SQLAlchemyError, ProgrammingError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.models import User, UserRole
-from app.auth.security import hash_password
+from app.auth.security import hash_password, verify_password
+from app.config import get_settings
 from app.database import get_db
 
 router = APIRouter(tags=["Admin Seed"])
+settings = get_settings()
 
 
 @router.get("/create-admin")
 async def create_admin(db: AsyncSession = Depends(get_db)):
-    email = "admin@trod.com"
-    password = "123456"
+    email = settings.FIRST_SUPERUSER_EMAIL.strip() or "admin@trod.com"
+    password = settings.FIRST_SUPERUSER_PASSWORD or "123456"
+    full_name = settings.FIRST_SUPERUSER_FULL_NAME.strip() or "Admin"
 
     try:
         result = await db.execute(select(User).where(User.email == email))
         existing_user = result.scalar_one_or_none()
 
         if existing_user is not None:
-            return {"message": "admin ya existe"}
+            existing_user.full_name = full_name
+            existing_user.role = UserRole.admin
+            existing_user.client_id = None
+            existing_user.is_active = True
+            existing_user.zones = None
+            if not verify_password(password, existing_user.hashed_password):
+                existing_user.hashed_password = hash_password(password)
+
+            await db.commit()
+            await db.refresh(existing_user)
+            return {"message": "admin actualizado"}
 
         admin = User(
             email=email,
             hashed_password=hash_password(password),
-            full_name="Admin",
+            full_name=full_name,
             role=UserRole.admin,
             client_id=None,
             is_active=True,

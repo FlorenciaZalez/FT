@@ -84,7 +84,7 @@ app.mount(f"{API_PREFIX}/uploads", StaticFiles(directory=uploads_dir), name="upl
 
 
 # ✅ Routers
-app.include_router(admin_seed_router)
+app.include_router(admin_seed_router, prefix=API_PREFIX)
 app.include_router(auth_router, prefix=API_PREFIX)
 app.include_router(transporters_router, prefix=API_PREFIX)
 app.include_router(clients_router, prefix=API_PREFIX)
