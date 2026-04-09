@@ -1,6 +1,5 @@
 from pathlib import Path
 
-from sqlalchemy import select
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
@@ -21,9 +20,7 @@ from app.orders.verify_router import router as dispatch_verify_router
 from app.billing.router import router as billing_router
 from app.shipping.router import router as shipping_router
 from app.config import get_settings
-from app.database import AsyncSessionLocal, Base, engine
-from app.auth.models import User, UserRole
-from app.auth.security import hash_password, verify_password
+from app.database import Base, engine
 
 
 # ✅ Crear app
@@ -108,43 +105,3 @@ app.include_router(shipping_router, prefix=API_PREFIX)
 async def initialize_database():
     async with engine.begin() as connection:
         await connection.run_sync(lambda sync_connection: Base.metadata.create_all(bind=sync_connection))
-
-
-@app.on_event("startup")
-async def create_admin():
-    try:
-        email = settings.FIRST_SUPERUSER_EMAIL.strip()
-        password = settings.FIRST_SUPERUSER_PASSWORD
-        full_name = settings.FIRST_SUPERUSER_FULL_NAME.strip() or "Admin"
-
-        if not email or not password:
-            return
-
-        async with AsyncSessionLocal() as db:
-            result = await db.execute(select(User).where(User.email == email))
-            existing_user = result.scalar_one_or_none()
-
-            if existing_user is None:
-                admin = User(
-                    email=email,
-                    hashed_password=hash_password(password),
-                    full_name=full_name,
-                    role=UserRole.admin,
-                    client_id=None,
-                    is_active=True,
-                    zones=None,
-                )
-                db.add(admin)
-            else:
-                existing_user.full_name = full_name
-                existing_user.role = UserRole.admin
-                existing_user.client_id = None
-                existing_user.is_active = True
-                existing_user.zones = None
-                if not verify_password(password, existing_user.hashed_password):
-                    existing_user.hashed_password = hash_password(password)
-
-            await db.commit()
-
-    except Exception as error:
-        print(f"Error creating admin user on startup: {error}")

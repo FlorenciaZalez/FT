@@ -1,18 +1,16 @@
 from fastapi import APIRouter, Depends, HTTPException
-from passlib.context import CryptContext
 from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError, ProgrammingError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.models import User, UserRole
+from app.auth.security import hash_password
 from app.database import get_db
 
 router = APIRouter(tags=["Admin Seed"])
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
-
-@router.get("/create-admin")
+@router.post("/create-admin")
 async def create_admin(db: AsyncSession = Depends(get_db)):
     email = "admin@trod.com"
     password = "123456"
@@ -26,7 +24,7 @@ async def create_admin(db: AsyncSession = Depends(get_db)):
 
         admin = User(
             email=email,
-            hashed_password=pwd_context.hash(password),
+            hashed_password=hash_password(password),
             full_name="Admin",
             role=UserRole.admin,
             client_id=None,
