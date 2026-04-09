@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 import app.models  # noqa: F401
 from app.auth.models import User, UserRole
 from app.auth.security import hash_password, verify_password
+from app.clients.models import Client
 from app.config import get_settings
 from app.database import Base, engine, get_db
 
@@ -21,7 +22,8 @@ async def create_admin(db: AsyncSession = Depends(get_db)):
 
     try:
         async with engine.begin() as connection:
-            await connection.run_sync(lambda sync_connection: Base.metadata.create_all(bind=sync_connection))
+            await connection.run_sync(lambda sync_connection: Client.__table__.create(bind=sync_connection, checkfirst=True))
+            await connection.run_sync(lambda sync_connection: User.__table__.create(bind=sync_connection, checkfirst=True))
 
         result = await db.execute(select(User).where(User.email == email))
         existing_user = result.scalar_one_or_none()
