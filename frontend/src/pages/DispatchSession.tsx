@@ -728,8 +728,8 @@ export default function DispatchSession() {
 
       {/* Conflict resolution modal */}
       {conflict && (
-        <div className="fixed inset-0 bg-text-blue-700/40 flex items-center justify-center z-50">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg p-6">
+        <div className="fixed inset-0 bg-text-blue-700/40 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg p-6 max-h-[calc(100vh-2rem)] overflow-y-auto">
             <div className="flex items-center justify-between mb-4">
               <div>
                 <h3 className="text-lg font-bold text-gray-900">Múltiples pedidos encontrados</h3>
@@ -813,8 +813,8 @@ export default function DispatchSession() {
 
       {/* Confirm modal */}
       {showConfirm && (
-        <div className="fixed inset-0 bg-text-blue-700/40 flex items-center justify-center z-50">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6">
+        <div className="fixed inset-0 bg-text-blue-700/40 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6 max-h-[calc(100vh-2rem)] overflow-y-auto">
             <h3 className="text-lg font-bold text-gray-900 mb-3">{transportTransferMode ? 'Confirmar salida a transporte' : 'Confirmar despacho'}</h3>
 
             <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-4 text-center">

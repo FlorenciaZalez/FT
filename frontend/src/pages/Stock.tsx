@@ -636,8 +636,8 @@ export default function StockPage() {
         const isZero = avail === 0;
         const isLow = isLowStock(stock);
         return (
-          <div className="fixed inset-0 bg-text-blue-700/40 flex items-center justify-center z-50">
-            <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6">
+          <div className="fixed inset-0 bg-text-blue-700/40 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6 max-h-[calc(100vh-2rem)] overflow-y-auto">
               <div className="flex items-center justify-between mb-5">
                 <div>
                   <h2 className="text-lg font-bold text-gray-900">{product.name}</h2>
@@ -875,7 +875,7 @@ function MerchandiseReceptionModal({
 }) {
   return (
     <div className="fixed inset-0 bg-text-blue-700/40 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-2xl shadow-xl w-full max-w-[560px] overflow-hidden">
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-[560px] overflow-y-auto max-h-[calc(100vh-2rem)]">
         <div className="px-6 py-4 border-b border-gray-200 flex items-start justify-between gap-4">
           <div>
             <h2 className="text-lg font-bold text-gray-900">Registrar recepción</h2>
@@ -1730,8 +1730,8 @@ function StockMoveModal({
   };
 
   return (
-    <div className="fixed inset-0 bg-text-blue-700/40 flex items-center justify-center z-50">
-      <div className="bg-white rounded-2xl shadow-xl w-full max-w-[640px] p-6">
+    <div className="fixed inset-0 bg-text-blue-700/40 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-[640px] p-6 max-h-[calc(100vh-2rem)] overflow-y-auto">
         <div className="flex items-center justify-between mb-5">
           <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2">
             <span

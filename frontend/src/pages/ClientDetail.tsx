@@ -522,8 +522,8 @@ export default function ClientDetail() {
 
       {/* Modal confirmar eliminación */}
       {confirmDelete && (
-        <div className="fixed inset-0 bg-text-blue-700/40 flex items-center justify-center z-50">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6">
+        <div className="fixed inset-0 bg-text-blue-700/40 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6 max-h-[calc(100vh-2rem)] overflow-y-auto">
             <h3 className="text-lg font-bold text-gray-900 mb-2">Eliminar cliente</h3>
             <p className="text-sm text-gray-500 mb-5">
               ¿Seguro que querés eliminar este cliente? Esta acción no se puede deshacer.
@@ -655,7 +655,7 @@ function StorageRecordModal({
 }) {
   return (
     <div className="fixed inset-0 bg-text-blue-700/40 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden">
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-y-auto max-h-[calc(100vh-2rem)]">
         <div className="px-6 py-4 border-b border-gray-200 flex items-start justify-between gap-4">
           <div>
             <h3 className="text-lg font-bold text-gray-900">

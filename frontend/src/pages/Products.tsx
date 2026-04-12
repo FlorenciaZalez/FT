@@ -416,8 +416,8 @@ function ConfirmModal({
       : 'bg-green-600 hover:opacity-90 text-white';
 
   return (
-    <div className="fixed inset-0 bg-text-blue-700/40 flex items-center justify-center z-50">
-      <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6">
+    <div className="fixed inset-0 bg-text-blue-700/40 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6 max-h-[calc(100vh-2rem)] overflow-y-auto">
         <h3 className="text-lg font-bold text-gray-900 mb-2">{title}</h3>
         <p className="text-sm text-gray-500 mb-5">{message}</p>
 
@@ -524,8 +524,8 @@ function EditProductModal({
   };
 
   return (
-    <div className="fixed inset-0 bg-text-blue-700/40 flex items-center justify-center z-50">
-      <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6">
+    <div className="fixed inset-0 bg-text-blue-700/40 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6 max-h-[calc(100vh-2rem)] overflow-y-auto">
         <div className="flex items-center justify-between mb-5">
           <h2 className="text-lg font-bold text-gray-900">Editar producto</h2>
           <button onClick={onClose} className="text-gray-500 hover:text-gray-500 text-xl">&times;</button>
@@ -633,8 +633,8 @@ function EditProductModal({
 
       {/* Confirm delete sub-modal */}
       {confirmDelete && (
-        <div className="fixed inset-0 bg-text-blue-700/40 flex items-center justify-center z-[60]">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6">
+        <div className="fixed inset-0 bg-text-blue-700/40 flex items-center justify-center z-[60] p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6 max-h-[calc(100vh-2rem)] overflow-y-auto">
             <h3 className="text-lg font-bold text-gray-900 mb-2">Eliminar producto</h3>
             <p className="text-sm text-gray-500 mb-5">
               ¿Seguro que querés eliminar este producto? Esta acción no se puede deshacer.
@@ -999,8 +999,8 @@ function LabelPrintModal({
   };
 
   return (
-    <div className="fixed inset-0 bg-text-blue-700/40 flex items-center justify-center z-50">
-      <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6">
+    <div className="fixed inset-0 bg-text-blue-700/40 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6 max-h-[calc(100vh-2rem)] overflow-y-auto">
         <div className="flex items-center justify-between mb-5">
           <div>
             <h2 className="text-lg font-bold text-gray-900">Imprimir etiqueta</h2>

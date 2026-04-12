@@ -517,8 +517,8 @@ function TransporterForm({
       </div>
 
       {showDeleteConfirm && (
-        <div className="fixed inset-0 bg-text-blue-700/50 flex items-center justify-center z-[60]">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6">
+        <div className="fixed inset-0 bg-text-blue-700/50 flex items-center justify-center z-[60] p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6 max-h-[calc(100vh-2rem)] overflow-y-auto">
             <h3 className="text-lg font-bold text-gray-900 mb-2">Eliminar transportista</h3>
             <p className="text-sm text-gray-500 mb-6">
               Esta acción no se puede deshacer. ¿Seguro que querés eliminar este transportista?

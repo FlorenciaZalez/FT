@@ -484,7 +484,7 @@ function PostalCodeRangeModal({
 
   return (
     <div className="fixed inset-0 bg-text-blue-700/40 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden">
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-y-auto max-h-[calc(100vh-2rem)]">
         <div className="px-6 py-4 border-b border-gray-200 flex items-start justify-between gap-4">
           <div>
             <h2 className="text-lg font-bold text-gray-900">{isEdit ? 'Editar rango postal' : 'Nuevo rango postal'}</h2>

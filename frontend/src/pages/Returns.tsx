@@ -214,8 +214,8 @@ export default function Returns() {
       )}
 
       {modalOrder && modalItem && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-text-blue-700/30 px-4">
-          <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-text-blue-700/30 p-4">
+          <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl max-h-[calc(100vh-2rem)] overflow-y-auto">
             <div className="flex items-start justify-between gap-4">
               <div>
                 <h2 className="text-xl font-bold text-gray-900">Recibir producto</h2>
