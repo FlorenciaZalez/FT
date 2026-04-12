@@ -149,12 +149,14 @@ function expandLabelItems(items: LabelPrintItem[]): LabelProduct[] {
 }
 
 function buildLabelMarkup(label: LabelProduct): string {
+  const normalizedName = label.name.trim();
   const normalizedSku = normalizeBarcodeValue(label.sku);
   const barcodeSvgMarkup = createBarcodeSvgMarkup(normalizedSku);
 
   return `
     <section class="label-page">
       <article class="label">
+        <div class="label__name">${escapeHtml(normalizedName)}</div>
         <div class="label__barcode-wrap">${barcodeSvgMarkup}</div>
         <div class="label__sku">${escapeHtml(normalizedSku)}</div>
       </article>
@@ -251,11 +253,22 @@ function buildPrintDocument(labels: LabelProduct[]): string {
         flex-direction: column;
         align-items: center;
         justify-content: center;
-        gap: 1.4mm;
+        gap: 1.1mm;
         overflow: hidden;
         background: var(--label-surface);
         page-break-inside: avoid;
         break-inside: avoid;
+      }
+
+      .label__name {
+        width: 36mm;
+        text-align: center;
+        font-size: 2.2mm;
+        font-weight: 700;
+        line-height: 1.15;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
       }
 
       .label__barcode-wrap {
