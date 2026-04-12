@@ -18,5 +18,16 @@ export default defineConfig(({ mode }) => {
           }
         : undefined,
     },
+    build: {
+      rollupOptions: {
+        output: {
+          manualChunks: {
+            'vendor-react': ['react', 'react-dom', 'react-router-dom'],
+            'vendor-pdf': ['jspdf', 'dompurify'],
+            'vendor-misc': ['axios', 'jsbarcode', 'qrcode.react', 'lucide-react'],
+          },
+        },
+      },
+    },
   }
 })

@@ -4,7 +4,14 @@
     {
       "label": "Infra local",
       "type": "shell",
-      "command": "docker-compose up -d db redis",
+      "command": "/Applications/Docker.app/Contents/Resources/bin/docker",
+      "args": [
+        "compose",
+        "up",
+        "-d",
+        "db",
+        "redis"
+      ],
       "options": {
         "cwd": "${workspaceFolder}"
       },
@@ -13,7 +20,7 @@
     {
       "label": "Migraciones local",
       "type": "shell",
-      "command": "/Users/florenciazalez/Desktop/Stock/venv/bin/python",
+      "command": "./.venv/bin/python",
       "args": [
         "-m",
         "alembic",
@@ -28,7 +35,7 @@
     {
       "label": "Backend local",
       "type": "shell",
-      "command": "/Users/florenciazalez/Desktop/Stock/venv/bin/python",
+      "command": "./.venv/bin/python",
       "args": [
         "-m",
         "uvicorn",
@@ -48,8 +55,9 @@
     {
       "label": "Frontend local",
       "type": "shell",
-      "command": "npm",
+      "command": "/Users/florenciazalez/.nvm/versions/node/v24.14.1/bin/node",
       "args": [
+        "/Users/florenciazalez/.nvm/versions/node/v24.14.1/lib/node_modules/npm/bin/npm-cli.js",
         "run",
         "dev",
         "--",
@@ -57,7 +65,10 @@
         "127.0.0.1"
       ],
       "options": {
-        "cwd": "${workspaceFolder}/frontend"
+        "cwd": "${workspaceFolder}/frontend",
+        "env": {
+          "PATH": "/Users/florenciazalez/.nvm/versions/node/v24.14.1/bin:${env:PATH}"
+        }
       },
       "isBackground": true,
       "problemMatcher": []

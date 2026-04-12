@@ -1,36 +1,39 @@
+import { lazy, Suspense } from 'react'
 import { Routes, Route, Navigate } from 'react-router-dom'
 import ProtectedRoute from './routes/ProtectedRoute'
 import DashboardLayout from './layouts/DashboardLayout'
-import Login from './pages/Login'
-import Dashboard from './pages/Dashboard'
-import Clients from './pages/Clients'
-import ClientDetail from './pages/ClientDetail'
-import ClientEdit from './pages/ClientEdit'
-import Products from './pages/Products'
-import Stock from './pages/Stock'
-import Users from './pages/Users'
-import Orders from './pages/Orders'
-import OrderDetail from './pages/OrderDetail'
-import Batches from './pages/Batches'
-import BatchDetail from './pages/BatchDetail'
-import Picking from './pages/Picking'
-import PickingSession from './pages/PickingSession'
-import BatchPickingCollect from './pages/BatchPickingCollect'
-import BatchPickingSession from './pages/BatchPickingSession'
-import DispatchSession from './pages/DispatchSession'
-import Locations from './pages/Locations'
-import Alerts from './pages/Alerts'
-import Transporters from './pages/Transporters'
-import DispatchVerify from './pages/DispatchVerify'
-import MercadoLibreCallback from './pages/MercadoLibreCallback'
-import Billing from './pages/Billing'
-import BillingHistory from './pages/BillingHistory'
-import ShippingRules from './pages/ShippingRules'
-import MercadoLibreMappings from './pages/MercadoLibreMappings'
-import Returns from './pages/Returns'
+
+const Login = lazy(() => import('./pages/Login'))
+const Dashboard = lazy(() => import('./pages/Dashboard'))
+const Clients = lazy(() => import('./pages/Clients'))
+const ClientDetail = lazy(() => import('./pages/ClientDetail'))
+const ClientEdit = lazy(() => import('./pages/ClientEdit'))
+const Products = lazy(() => import('./pages/Products'))
+const Stock = lazy(() => import('./pages/Stock'))
+const Users = lazy(() => import('./pages/Users'))
+const Orders = lazy(() => import('./pages/Orders'))
+const OrderDetail = lazy(() => import('./pages/OrderDetail'))
+const Batches = lazy(() => import('./pages/Batches'))
+const BatchDetail = lazy(() => import('./pages/BatchDetail'))
+const Picking = lazy(() => import('./pages/Picking'))
+const PickingSession = lazy(() => import('./pages/PickingSession'))
+const BatchPickingCollect = lazy(() => import('./pages/BatchPickingCollect'))
+const BatchPickingSession = lazy(() => import('./pages/BatchPickingSession'))
+const DispatchSession = lazy(() => import('./pages/DispatchSession'))
+const Locations = lazy(() => import('./pages/Locations'))
+const Alerts = lazy(() => import('./pages/Alerts'))
+const Transporters = lazy(() => import('./pages/Transporters'))
+const DispatchVerify = lazy(() => import('./pages/DispatchVerify'))
+const MercadoLibreCallback = lazy(() => import('./pages/MercadoLibreCallback'))
+const Billing = lazy(() => import('./pages/Billing'))
+const BillingHistory = lazy(() => import('./pages/BillingHistory'))
+const ShippingRules = lazy(() => import('./pages/ShippingRules'))
+const MercadoLibreMappings = lazy(() => import('./pages/MercadoLibreMappings'))
+const Returns = lazy(() => import('./pages/Returns'))
 
 function App() {
   return (
+    <Suspense fallback={<div className="flex h-screen items-center justify-center bg-gray-50"><div className="h-8 w-8 animate-spin rounded-full border-4 border-blue-600 border-t-transparent" /></div>}>
     <Routes>
       <Route path="/login" element={<Login />} />
       <Route path="/dispatch/verify/:batchNumber" element={<DispatchVerify />} />
@@ -67,6 +70,7 @@ function App() {
 
       <Route path="*" element={<Navigate to="/dashboard" replace />} />
     </Routes>
+    </Suspense>
   )
 }
 

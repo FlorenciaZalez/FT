@@ -5,6 +5,7 @@ interface AuthState {
   token: string | null;
   user: { id: number; email: string; full_name: string; role: string; client_id: number | null; zones: string[] | null } | null;
   isAuthenticated: boolean;
+  isLoading: boolean;
   login: (email: string, password: string) => Promise<void>;
   logout: () => void;
 }
@@ -16,6 +17,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     localStorage.getItem('access_token')
   );
   const [user, setUser] = useState<AuthState['user']>(null);
+  const [isLoading, setIsLoading] = useState<boolean>(() =>
+    !!localStorage.getItem('access_token')
+  );
 
   useEffect(() => {
     if (token && !user) {
@@ -25,7 +29,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         .catch(() => {
           localStorage.removeItem('access_token');
           setToken(null);
-        });
+        })
+        .finally(() => setIsLoading(false));
+    } else {
+      setIsLoading(false);
     }
   }, [token, user]);
 
@@ -48,7 +55,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   return (
     <AuthContext.Provider
-      value={{ token, user, isAuthenticated: !!token, login, logout }}
+      value={{ token, user, isAuthenticated: !!token && !!user, isLoading, login, logout }}
     >
       {children}
     </AuthContext.Provider>

@@ -579,7 +579,7 @@ export default function DashboardLayout() {
   const renderSidebar = () => (
     <aside
       className={[
-        'fixed left-0 top-1/2 z-[9999] -translate-y-1/2 overflow-visible transition-[width] duration-300 ease-out',
+        'fixed left-0 top-1/2 z-[9999] -translate-y-1/2 overflow-visible transition-[width] duration-300 ease-out max-h-[calc(100vh-112px)]',
         collapsed ? 'w-[72px]' : 'w-[260px]',
       ].join(' ')}
       onMouseEnter={() => handleOverlayOpen()}
@@ -588,12 +588,12 @@ export default function DashboardLayout() {
       <div
         style={{ minHeight: `${sidebarBaseHeight}px` }}
         className={[
-          'ml-4 flex h-auto flex-col overflow-hidden rounded-2xl border border-white/20 bg-white/85 py-4 shadow-[0_20px_60px_rgba(0,0,0,0.15)] backdrop-blur-xl transition-[width,background-color,box-shadow] duration-300 ease-out',
+          'ml-4 flex h-auto max-h-[calc(100vh-112px)] flex-col overflow-hidden rounded-2xl border border-white/20 bg-white/85 py-4 shadow-[0_20px_60px_rgba(0,0,0,0.15)] backdrop-blur-xl transition-[width,background-color,box-shadow] duration-300 ease-out',
           collapsed ? 'w-[64px]' : 'w-[244px]',
         ].join(' ')}
       >
         {collapsed ? (
-          <nav className="min-h-0 flex flex-1 flex-col items-center gap-2 overflow-y-auto px-2">
+          <nav className="min-h-0 flex flex-1 flex-col items-center gap-2 overflow-y-auto overflow-x-hidden px-2">
             {visibleMenu.map((entry) => {
               const Icon = entry.icon;
               const active = isEntryActive(entry, location.pathname);
@@ -619,7 +619,7 @@ export default function DashboardLayout() {
             })}
           </nav>
         ) : (
-          <nav className="min-h-0 flex-1 overflow-y-auto px-3 animate-[sidebar-overlay-in_260ms_ease-out_both]">
+          <nav className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-3 animate-[sidebar-overlay-in_260ms_ease-out_both]">
             <div className="space-y-2">
               {visibleMenu.map((entry, index) => {
                 if (entry.type === 'item') {
@@ -666,8 +666,8 @@ export default function DashboardLayout() {
   );
 
   return (
-    <div className="relative flex h-screen flex-col bg-gray-50 text-gray-900 [@keyframes_fade-slide-in]:from{opacity:0;transform:translateX(-10px)} [@keyframes_fade-slide-in]:to{opacity:1;transform:translateX(0)} [@keyframes_sidebar-overlay-in]:from{opacity:0;transform:translateX(-18px);opacity:0} [@keyframes_sidebar-overlay-in]:to{opacity:1;transform:translateX(0)}">
-      <header className="fixed left-0 right-0 top-4 z-[40] px-6">
+    <div className="relative flex h-screen flex-col overflow-x-hidden bg-gray-50 text-gray-900 [@keyframes_fade-slide-in]:from{opacity:0;transform:translateX(-10px)} [@keyframes_fade-slide-in]:to{opacity:1;transform:translateX(0)} [@keyframes_sidebar-overlay-in]:from{opacity:0;transform:translateX(-18px);opacity:0} [@keyframes_sidebar-overlay-in]:to{opacity:1;transform:translateX(0)}">
+      <header className="fixed left-0 right-0 top-4 z-[10000] px-6">
         <div className="flex h-16 items-center rounded-2xl border border-white/20 bg-white/90 px-6 shadow-[0_8px_25px_rgba(0,0,0,0.06)] backdrop-blur-xl">
           <div className="flex flex-1 items-center">
             <button
@@ -768,9 +768,9 @@ export default function DashboardLayout() {
       {renderSidebar()}
 
       <div className="flex min-h-0 flex-1">
-        {!collapsed && <div className="fixed inset-0 z-40 bg-black/10 backdrop-blur-[2px]" />}
+        {!collapsed && <div className="fixed inset-0 z-[9998] bg-black/10 backdrop-blur-[2px]" />}
 
-        <main className="ml-[72px] flex flex-1 flex-col overflow-y-auto px-8 pb-8 pt-[104px]">
+        <main className="ml-[72px] flex flex-1 flex-col overflow-y-auto overflow-x-hidden px-8 pb-8 pt-[104px]">
           <Outlet context={{ activeAlertCount, visibleAlertNoticeCount: alertNoticeCount, openAlertsPanel }} />
         </main>
       </div>

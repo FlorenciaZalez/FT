@@ -133,6 +133,7 @@ export default function StockPage() {
   const [selectedProductId, setSelectedProductId] = useState<number | null>(null);
   const [successMsg, setSuccessMsg] = useState('');
   const [receptionPeriod, setReceptionPeriod] = useState(getCurrentPeriod());
+  const [showReceptionOverviewModal, setShowReceptionOverviewModal] = useState(false);
   const [showReceptionModal, setShowReceptionModal] = useState(false);
   const [receptionRecords, setReceptionRecords] = useState<MerchandiseReceptionRecord[]>([]);
   const [receptionFee, setReceptionFee] = useState(0);
@@ -320,6 +321,15 @@ export default function StockPage() {
         </div>
         {!isClient && (
           <div className="flex gap-3">
+          {isAdmin && (
+            <button
+              type="button"
+              onClick={() => setShowReceptionOverviewModal(true)}
+              className="px-4 py-2 rounded-lg border border-blue-200 bg-blue-50 text-blue-700 text-sm font-medium transition hover:bg-blue-100"
+            >
+              Recepción de mercadería
+            </button>
+          )}
           <button
             onClick={() => setShowBulkEntry((current) => !current)}
             className={`px-4 py-2 rounded-lg border text-sm font-medium transition flex items-center gap-1.5 ${
@@ -356,93 +366,6 @@ export default function StockPage() {
       )}
 
       {successMsg && <SuccessToast message={successMsg} onClose={() => setSuccessMsg('')} />}
-
-      {isAdmin && (
-        <section className="bg-white rounded-2xl border border-gray-200 overflow-hidden mb-4">
-          <div className="px-6 py-4 border-b border-gray-200 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-            <div>
-              <h2 className="text-lg font-bold text-gray-900">Recepción de mercadería</h2>
-              <p className="text-sm text-gray-500 mt-1">Registrá descargas operativas del depósito. El cargo se refleja después en Facturación.</p>
-              <div className="mt-3 text-sm text-gray-600">
-                Tarifa: <span className="font-medium text-gray-900">{formatCurrency(receptionFee)}</span> por camión
-                <span className="mx-2 text-gray-400">•</span>
-                Camiones: <span className="font-medium text-gray-900">{formatNumber(receptionTruckCount, 0)}</span>
-                <span className="mx-2 text-gray-400">•</span>
-                Total: <span className="font-medium text-gray-900">{formatCurrency(receptionTotal)}</span>
-              </div>
-            </div>
-
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-end lg:self-end">
-              <div className="flex flex-col justify-end">
-                <label className="block text-xs font-medium uppercase tracking-wide text-gray-500 mb-1">Período</label>
-                <input
-                  type="month"
-                  value={receptionPeriod}
-                  onChange={(event) => setReceptionPeriod(event.target.value)}
-                  className="h-[42px] px-4 py-2.5 border border-gray-200 rounded-lg bg-white"
-                />
-              </div>
-              <button
-                type="button"
-                onClick={() => setShowReceptionModal(true)}
-                className="h-[42px] bg-blue-600 text-white px-4 py-2.5 rounded-lg text-sm font-medium hover:opacity-90 transition"
-              >
-                + Registrar recepción
-              </button>
-            </div>
-          </div>
-
-          {receptionError && (
-            <div className="mx-6 mt-4 bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg p-3">
-              {receptionError}
-            </div>
-          )}
-
-          {receptionLoading ? (
-            <div className="px-6 py-6 text-sm text-gray-500">Cargando recepciones...</div>
-          ) : receptionRecords.length === 0 ? (
-            <div className="px-6 py-6 text-sm text-gray-500">
-              No hay recepciones cargadas para {receptionPeriod}{clientFilter ? ' con el cliente seleccionado' : ''}.
-            </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[760px] text-sm">
-                <thead>
-                  <tr className="bg-gray-50 border-b border-gray-200">
-                    <th className="text-left px-6 py-3 font-medium text-gray-500">Cliente</th>
-                    <th className="text-left px-4 py-3 font-medium text-gray-500">Fecha</th>
-                    <th className="text-right px-4 py-3 font-medium text-gray-500">Camiones</th>
-                    <th className="text-left px-4 py-3 font-medium text-gray-500">Observaciones</th>
-                    <th className="text-right px-4 py-3 font-medium text-gray-500">Costo</th>
-                    <th className="text-right px-6 py-3 font-medium text-gray-500">Acción</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {receptionRecords.map((record) => (
-                    <tr key={record.id} className="border-b border-gray-200 last:border-b-0">
-                      <td className="px-6 py-4 font-medium text-gray-900">{record.client_name ?? `Cliente #${record.client_id}`}</td>
-                      <td className="px-4 py-4 text-gray-500">{new Date(record.fecha).toLocaleDateString('es-AR')}</td>
-                      <td className="px-4 py-4 text-right text-gray-500">{formatNumber(record.cantidad_camiones, 0)}</td>
-                      <td className="px-4 py-4 text-gray-900">{record.observaciones || 'Sin observaciones'}</td>
-                      <td className="px-4 py-4 text-right font-medium text-gray-900">{formatCurrency(record.costo_total)}</td>
-                      <td className="px-6 py-4 text-right">
-                        <button
-                          type="button"
-                          onClick={() => handleDeleteReception(record.id).catch(() => {})}
-                          disabled={deletingReceptionId === record.id}
-                          className="px-3 py-1.5 text-xs font-medium text-red-700 bg-red-50 rounded-lg hover:bg-red-100 transition disabled:opacity-50"
-                        >
-                          {deletingReceptionId === record.id ? 'Eliminando...' : 'Eliminar'}
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </section>
-      )}
 
       {!isClient && showBulkEntry && (
         <BulkStockEntryPanel
@@ -525,8 +448,8 @@ export default function StockPage() {
           <p className="text-gray-500 text-sm">Probá con otro cliente, otro estado o una búsqueda distinta.</p>
         </div>
       ) : (
-        <div className="bg-white rounded-xl border border-gray-200 overflow-y-auto flex-1 min-h-0 table-scroll-container">
-          <table className="w-full text-sm">
+        <div className="bg-white rounded-xl border border-gray-200 overflow-auto flex-1 min-h-0 table-scroll-container">
+          <table className="w-full min-w-[1020px] text-sm">
             <thead>
               <tr className="bg-gray-50 border-b border-gray-200">
                 <th className="text-left px-6 py-3 font-medium text-gray-500">Producto</th>
@@ -671,6 +594,29 @@ export default function StockPage() {
         />
       )}
 
+      {showReceptionOverviewModal && (
+        <MerchandiseReceptionOverviewModal
+          period={receptionPeriod}
+          onPeriodChange={setReceptionPeriod}
+          receptionFee={receptionFee}
+          receptionTruckCount={receptionTruckCount}
+          receptionTotal={receptionTotal}
+          loading={receptionLoading}
+          error={receptionError}
+          records={receptionRecords}
+          deletingReceptionId={deletingReceptionId}
+          clientFilter={clientFilter}
+          onClose={() => setShowReceptionOverviewModal(false)}
+          onOpenCreate={() => {
+            setShowReceptionOverviewModal(false);
+            setShowReceptionModal(true);
+          }}
+          onDelete={(recordId) => {
+            handleDeleteReception(recordId).catch(() => {});
+          }}
+        />
+      )}
+
       {/* History Modal */}
       {historyProductId !== null && historyProduct && (
         <MovementHistoryModal
@@ -776,6 +722,134 @@ function getApiErrorMessage(error: unknown, fallback: string) {
   return (
     (error as { response?: { data?: { detail?: string } } })?.response?.data?.detail ??
     fallback
+  );
+}
+
+function MerchandiseReceptionOverviewModal({
+  period,
+  onPeriodChange,
+  receptionFee,
+  receptionTruckCount,
+  receptionTotal,
+  loading,
+  error,
+  records,
+  deletingReceptionId,
+  clientFilter,
+  onClose,
+  onOpenCreate,
+  onDelete,
+}: {
+  period: string;
+  onPeriodChange: (value: string) => void;
+  receptionFee: number;
+  receptionTruckCount: number;
+  receptionTotal: number;
+  loading: boolean;
+  error: string;
+  records: MerchandiseReceptionRecord[];
+  deletingReceptionId: number | null;
+  clientFilter: string;
+  onClose: () => void;
+  onOpenCreate: () => void;
+  onDelete: (recordId: number) => void;
+}) {
+  return (
+    <div className="fixed inset-0 bg-text-blue-700/40 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-6xl max-h-[86vh] overflow-hidden flex flex-col">
+        <div className="px-6 py-4 border-b border-gray-200 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+          <div>
+            <h2 className="text-lg font-bold text-gray-900">Recepción de mercadería</h2>
+            <p className="text-sm text-gray-500 mt-1">Registrá descargas operativas del depósito. El cargo se refleja después en Facturación.</p>
+            <div className="mt-2 text-sm text-gray-600">
+              Tarifa: <span className="font-medium text-gray-900">{formatCurrency(receptionFee)}</span> por camión
+              <span className="mx-2 text-gray-400">•</span>
+              Camiones: <span className="font-medium text-gray-900">{formatNumber(receptionTruckCount, 0)}</span>
+              <span className="mx-2 text-gray-400">•</span>
+              Total: <span className="font-medium text-gray-900">{formatCurrency(receptionTotal)}</span>
+            </div>
+          </div>
+
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+            <div className="flex flex-col justify-end">
+              <label className="block text-xs font-medium uppercase tracking-wide text-gray-500 mb-1">Período</label>
+              <input
+                type="month"
+                value={period}
+                onChange={(event) => onPeriodChange(event.target.value)}
+                className="h-[42px] px-4 py-2.5 border border-gray-200 rounded-lg bg-white"
+              />
+            </div>
+            <button
+              type="button"
+              onClick={onOpenCreate}
+              className="h-[42px] bg-blue-600 text-white px-4 py-2.5 rounded-lg text-sm font-medium hover:opacity-90 transition"
+            >
+              + Registrar recepción
+            </button>
+            <button
+              type="button"
+              onClick={onClose}
+              className="h-[42px] px-4 py-2.5 border border-gray-200 rounded-lg text-sm font-medium text-gray-900 hover:bg-gray-50 transition"
+            >
+              Cerrar
+            </button>
+          </div>
+        </div>
+
+        {error && (
+          <div className="mx-6 mt-4 bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg p-3">
+            {error}
+          </div>
+        )}
+
+        <div className="flex-1 min-h-0 p-6 pt-4 overflow-auto">
+          {loading ? (
+            <div className="py-6 text-sm text-gray-500">Cargando recepciones...</div>
+          ) : records.length === 0 ? (
+            <div className="py-6 text-sm text-gray-500">
+              No hay recepciones cargadas para {period}{clientFilter ? ' con el cliente seleccionado' : ''}.
+            </div>
+          ) : (
+            <div className="overflow-x-auto rounded-xl border border-gray-200">
+              <table className="w-full min-w-[760px] text-sm">
+                <thead>
+                  <tr className="bg-gray-50 border-b border-gray-200">
+                    <th className="text-left px-6 py-3 font-medium text-gray-500">Cliente</th>
+                    <th className="text-left px-4 py-3 font-medium text-gray-500">Fecha</th>
+                    <th className="text-right px-4 py-3 font-medium text-gray-500">Camiones</th>
+                    <th className="text-left px-4 py-3 font-medium text-gray-500">Observaciones</th>
+                    <th className="text-right px-4 py-3 font-medium text-gray-500">Costo</th>
+                    <th className="text-right px-6 py-3 font-medium text-gray-500">Acción</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {records.map((record) => (
+                    <tr key={record.id} className="border-b border-gray-200 last:border-b-0">
+                      <td className="px-6 py-4 font-medium text-gray-900">{record.client_name ?? `Cliente #${record.client_id}`}</td>
+                      <td className="px-4 py-4 text-gray-500">{new Date(record.fecha).toLocaleDateString('es-AR')}</td>
+                      <td className="px-4 py-4 text-right text-gray-500">{formatNumber(record.cantidad_camiones, 0)}</td>
+                      <td className="px-4 py-4 text-gray-900">{record.observaciones || 'Sin observaciones'}</td>
+                      <td className="px-4 py-4 text-right font-medium text-gray-900">{formatCurrency(record.costo_total)}</td>
+                      <td className="px-6 py-4 text-right">
+                        <button
+                          type="button"
+                          onClick={() => onDelete(record.id)}
+                          disabled={deletingReceptionId === record.id}
+                          className="px-3 py-1.5 text-xs font-medium text-red-700 bg-red-50 rounded-lg hover:bg-red-100 transition disabled:opacity-50"
+                        >
+                          {deletingReceptionId === record.id ? 'Eliminando...' : 'Eliminar'}
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -1288,187 +1362,189 @@ function BulkStockEntryPanel({
   };
 
   return (
-    <div className="bg-white rounded-2xl border border-green-200 shadow-sm mb-6 overflow-hidden">
-      <div className="px-6 py-4 border-b border-green-200 bg-green-50 flex items-center justify-between gap-4">
-        <div>
-          <h2 className="text-lg font-bold text-green-700">Ingreso masivo</h2>
-          <p className="text-sm text-green-700 mt-1">
-            Cargá varios SKU seguidos
-          </p>
-        </div>
-        <button
-          onClick={onClose}
-          className="text-sm font-medium text-green-700 hover:text-green-700 transition"
-        >
-          Cerrar
-        </button>
-      </div>
-
-      <div className="p-6 space-y-4">
-        {panelError && (
-          <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg p-3">
-            {panelError}
+    <div className="fixed inset-0 bg-text-blue-700/40 z-50 p-4 flex items-center justify-center">
+      <div className="bg-white rounded-2xl border border-green-200 shadow-xl w-full max-w-6xl max-h-[86vh] overflow-hidden flex flex-col">
+        <div className="px-6 py-4 border-b border-green-200 bg-green-50 flex items-center justify-between gap-4">
+          <div>
+            <h2 className="text-lg font-bold text-green-700">Ingreso masivo</h2>
+            <p className="text-sm text-green-700 mt-1">
+              Cargá varios SKU seguidos
+            </p>
           </div>
-        )}
+          <button
+            onClick={onClose}
+            className="text-sm font-medium text-green-700 hover:text-green-700 transition"
+          >
+            Cerrar
+          </button>
+        </div>
 
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[760px] text-sm">
-            <thead>
-              <tr className="text-left border-b border-gray-200">
-                <th className="pb-3 pr-3 font-medium text-gray-500">SKU</th>
-                <th className="pb-3 px-3 font-medium text-gray-500">Cliente</th>
-                <th className="pb-3 px-3 font-medium text-gray-500">Producto</th>
-                <th className="pb-3 px-3 font-medium text-gray-500">Cantidad</th>
-                <th className="pb-3 px-3 font-medium text-gray-500">Imprimir etiquetas</th>
-                <th className="pb-3 pl-3 font-medium text-gray-500">Acción</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((row) => {
-                const quantityInvalid = row.quantity.trim() !== '' && (Number.isNaN(parseInt(row.quantity, 10)) || parseInt(row.quantity, 10) <= 0);
-                const rowHasError = row.status === 'error';
-                const debouncedQuery = normalizeSku(debouncedQueries[row.id] ?? '');
-                const rowMatches = searchMatchesByRow.get(row.id) ?? [];
-                const shouldShowDropdown = openDropdownRowId === row.id && debouncedQuery.length > 0 && rowMatches.length > 0 && row.productId === null;
-                const showNoResults = openDropdownRowId === row.id && debouncedQuery.length > 0 && rowMatches.length === 0 && row.productId === null;
-                const displayError = row.error || (showNoResults ? 'Producto no encontrado' : '');
-                return (
-                  <tr key={row.id} className="border-b border-gray-200 last:border-b-0 align-top">
-                    <td className="py-3 pr-3 w-[220px] relative">
-                      <input
-                        ref={(element) => {
-                          searchInputRefs.current[row.id] = element;
-                        }}
-                        type="text"
-                        value={row.sku}
-                        onChange={(event) => handleSkuChange(row.id, event.target.value)}
-                        onFocus={() => {
-                          if (normalizeSku(row.sku).length > 0) {
-                            setOpenDropdownRowId(row.id);
-                          }
-                        }}
-                        onBlur={() => {
-                          window.setTimeout(() => {
-                            setOpenDropdownRowId((current) => (current === row.id ? null : current));
-                          }, 120);
-                        }}
-                        onKeyDown={(event) => handleSkuKeyDown(row.id, event)}
-                        className={`w-full px-3 py-2.5 border rounded-lg outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
-                          row.status === 'matched'
-                            ? 'border-green-200 bg-green-50'
-                            : rowHasError
-                              ? 'border-red-200 bg-red-50'
-                              : 'border-gray-200 bg-white'
-                        }`}
-                        placeholder="Escaneá o buscá por SKU o nombre"
-                        autoComplete="off"
-                      />
-                      {shouldShowDropdown && (
-                        <div className="absolute left-0 right-3 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-20 overflow-hidden">
-                          {rowMatches.map((product, index) => (
-                            <button
-                              key={`${row.id}-${product.id}`}
-                              type="button"
-                              onMouseDown={(event) => {
-                                event.preventDefault();
-                                selectSearchMatch(row.id, product);
-                              }}
-                              className={`w-full px-3 py-2.5 text-left text-sm transition ${
-                                index === (highlightedIndexByRow[row.id] ?? 0)
-                                  ? 'bg-green-50 text-green-700'
-                                  : 'bg-white text-gray-900 hover:bg-gray-50'
-                              }`}
-                            >
-                              <div className="font-medium text-gray-900">{product.name} (SKU: {product.sku})</div>
-                              <div className="text-xs text-gray-500 mt-0.5">{clientNameById.get(product.client_id) ?? '—'}</div>
-                            </button>
-                          ))}
+        <div className="p-6 space-y-4 flex-1 min-h-0 overflow-auto">
+          {panelError && (
+            <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg p-3">
+              {panelError}
+            </div>
+          )}
+
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[760px] text-sm">
+              <thead>
+                <tr className="text-left border-b border-gray-200">
+                  <th className="pb-3 pr-3 font-medium text-gray-500">SKU</th>
+                  <th className="pb-3 px-3 font-medium text-gray-500">Cliente</th>
+                  <th className="pb-3 px-3 font-medium text-gray-500">Producto</th>
+                  <th className="pb-3 px-3 font-medium text-gray-500">Cantidad</th>
+                  <th className="pb-3 px-3 font-medium text-gray-500">Imprimir etiquetas</th>
+                  <th className="pb-3 pl-3 font-medium text-gray-500">Acción</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((row) => {
+                  const quantityInvalid = row.quantity.trim() !== '' && (Number.isNaN(parseInt(row.quantity, 10)) || parseInt(row.quantity, 10) <= 0);
+                  const rowHasError = row.status === 'error';
+                  const debouncedQuery = normalizeSku(debouncedQueries[row.id] ?? '');
+                  const rowMatches = searchMatchesByRow.get(row.id) ?? [];
+                  const shouldShowDropdown = openDropdownRowId === row.id && debouncedQuery.length > 0 && rowMatches.length > 0 && row.productId === null;
+                  const showNoResults = openDropdownRowId === row.id && debouncedQuery.length > 0 && rowMatches.length === 0 && row.productId === null;
+                  const displayError = row.error || (showNoResults ? 'Producto no encontrado' : '');
+                  return (
+                    <tr key={row.id} className="border-b border-gray-200 last:border-b-0 align-top">
+                      <td className="py-2.5 pr-3 w-[220px] relative">
+                        <input
+                          ref={(element) => {
+                            searchInputRefs.current[row.id] = element;
+                          }}
+                          type="text"
+                          value={row.sku}
+                          onChange={(event) => handleSkuChange(row.id, event.target.value)}
+                          onFocus={() => {
+                            if (normalizeSku(row.sku).length > 0) {
+                              setOpenDropdownRowId(row.id);
+                            }
+                          }}
+                          onBlur={() => {
+                            window.setTimeout(() => {
+                              setOpenDropdownRowId((current) => (current === row.id ? null : current));
+                            }, 120);
+                          }}
+                          onKeyDown={(event) => handleSkuKeyDown(row.id, event)}
+                          className={`w-full px-3 py-2 border rounded-lg outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
+                            row.status === 'matched'
+                              ? 'border-green-200 bg-green-50'
+                              : rowHasError
+                                ? 'border-red-200 bg-red-50'
+                                : 'border-gray-200 bg-white'
+                          }`}
+                          placeholder="Escaneá o buscá por SKU o nombre"
+                          autoComplete="off"
+                        />
+                        {shouldShowDropdown && (
+                          <div className="absolute left-0 right-3 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-20 overflow-hidden">
+                            {rowMatches.map((product, index) => (
+                              <button
+                                key={`${row.id}-${product.id}`}
+                                type="button"
+                                onMouseDown={(event) => {
+                                  event.preventDefault();
+                                  selectSearchMatch(row.id, product);
+                                }}
+                                className={`w-full px-3 py-2.5 text-left text-sm transition ${
+                                  index === (highlightedIndexByRow[row.id] ?? 0)
+                                    ? 'bg-green-50 text-green-700'
+                                    : 'bg-white text-gray-900 hover:bg-gray-50'
+                                }`}
+                              >
+                                <div className="font-medium text-gray-900">{product.name} (SKU: {product.sku})</div>
+                                <div className="text-xs text-gray-500 mt-0.5">{clientNameById.get(product.client_id) ?? '—'}</div>
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                        {displayError && <p className="text-xs text-red-700 mt-1">{displayError}</p>}
+                      </td>
+                      <td className="py-2.5 px-3 w-[180px]">
+                        <div className={`min-h-[38px] px-3 py-2 rounded-lg border ${row.clientId ? 'border-gray-200 bg-gray-50 text-gray-900' : 'border-dashed border-gray-200 text-gray-500 bg-gray-50/60'}`}>
+                          {row.clientName || 'Autocompletado'}
                         </div>
-                      )}
-                      {displayError && <p className="text-xs text-red-700 mt-1">{displayError}</p>}
-                    </td>
-                    <td className="py-3 px-3 w-[180px]">
-                      <div className={`min-h-[42px] px-3 py-2.5 rounded-lg border ${row.clientId ? 'border-gray-200 bg-gray-50 text-gray-900' : 'border-dashed border-gray-200 text-gray-500 bg-gray-50/60'}`}>
-                        {row.clientName || 'Autocompletado'}
-                      </div>
-                    </td>
-                    <td className="py-3 px-3 min-w-[240px]">
-                      <div className={`min-h-[42px] px-3 py-2.5 rounded-lg border ${row.productId ? 'border-gray-200 bg-gray-50 text-gray-900' : 'border-dashed border-gray-200 text-gray-500 bg-gray-50/60'}`}>
-                        {row.productName || 'Autocompletado'}
-                      </div>
-                    </td>
-                    <td className="py-3 px-3 w-[120px]">
-                      <input
-                        type="number"
-                        min={1}
-                        value={row.quantity}
-                        onChange={(event) => handleQuantityChange(row.id, event.target.value)}
-                        onKeyDown={(event) => {
-                          if (event.key !== 'Enter') return;
-                          event.preventDefault();
-                          handleRowAdvance(row.id);
-                        }}
-                        className={`w-full px-3 py-2.5 border rounded-lg outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${quantityInvalid ? 'border-red-200 bg-red-50' : 'border-gray-200 bg-white'}`}
-                      />
-                    </td>
-                    <td className="py-3 px-3 w-[210px]">
-                      <div className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2.5 space-y-2">
-                        <label className="flex items-center gap-2 text-sm font-medium text-gray-900">
-                          <input
-                            type="checkbox"
-                            checked={row.printLabels}
-                            onChange={(event) => handlePrintToggle(row.id, event.target.checked)}
-                            className="h-4 w-4 rounded border-gray-200 text-green-700 focus:ring-blue-500"
-                          />
-                          Imprimir
-                        </label>
+                      </td>
+                      <td className="py-2.5 px-3 min-w-[240px]">
+                        <div className={`min-h-[38px] px-3 py-2 rounded-lg border ${row.productId ? 'border-gray-200 bg-gray-50 text-gray-900' : 'border-dashed border-gray-200 text-gray-500 bg-gray-50/60'}`}>
+                          {row.productName || 'Autocompletado'}
+                        </div>
+                      </td>
+                      <td className="py-2.5 px-3 w-[120px]">
                         <input
                           type="number"
                           min={1}
-                          value={row.printQuantity}
-                          onChange={(event) => handlePrintQuantityChange(row.id, event.target.value)}
-                          disabled={!row.printLabels}
-                          className="w-full px-3 py-2 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-50 disabled:text-gray-500"
-                          placeholder="Cantidad"
+                          value={row.quantity}
+                          onChange={(event) => handleQuantityChange(row.id, event.target.value)}
+                          onKeyDown={(event) => {
+                            if (event.key !== 'Enter') return;
+                            event.preventDefault();
+                            handleRowAdvance(row.id);
+                          }}
+                          className={`w-full px-3 py-2 border rounded-lg outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${quantityInvalid ? 'border-red-200 bg-red-50' : 'border-gray-200 bg-white'}`}
                         />
-                      </div>
-                    </td>
-                    <td className="py-3 pl-3 w-[90px]">
-                      <button
-                        type="button"
-                        onClick={() => removeRow(row.id)}
-                        className="px-3 py-2 text-sm font-medium text-red-700 hover:bg-red-50 rounded-lg transition"
-                      >
-                        Eliminar
-                      </button>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-
-        <div className="flex items-center justify-between gap-4 pt-2">
-          <div className="text-sm text-gray-500">
-            {activeRows.length} fila{activeRows.length !== 1 ? 's' : ''} lista{activeRows.length !== 1 ? 's' : ''} para procesar
+                      </td>
+                      <td className="py-2.5 px-3 w-[210px]">
+                        <div className="flex items-center gap-2">
+                          <label className="flex items-center gap-1.5 text-sm text-gray-700 whitespace-nowrap cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={row.printLabels}
+                              onChange={(event) => handlePrintToggle(row.id, event.target.checked)}
+                              className="h-4 w-4 rounded border-gray-300 text-green-700 focus:ring-blue-500"
+                            />
+                            Imprimir
+                          </label>
+                          <input
+                            type="number"
+                            min={1}
+                            value={row.printQuantity}
+                            onChange={(event) => handlePrintQuantityChange(row.id, event.target.value)}
+                            disabled={!row.printLabels}
+                            className="w-16 px-2 py-1.5 border border-gray-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-50 disabled:text-gray-400"
+                            placeholder="#"
+                          />
+                        </div>
+                      </td>
+                      <td className="py-2.5 pl-3 w-[90px]">
+                        <button
+                          type="button"
+                          onClick={() => removeRow(row.id)}
+                          className="px-3 py-2 text-sm font-medium text-red-700 hover:bg-red-50 rounded-lg transition"
+                        >
+                          Eliminar
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
-          <div className="flex gap-3">
-            <button
-              type="button"
-              onClick={() => appendRow()}
-              className="px-4 py-2 border border-gray-200 rounded-lg text-sm font-medium text-gray-900 hover:bg-gray-50 transition"
-            >
-              Agregar fila
-            </button>
-            <button
-              type="button"
-              onClick={handleConfirm}
-              disabled={submitting}
-              className="px-4 py-2 bg-green-600 text-white rounded-lg text-sm font-medium hover:opacity-90 disabled:opacity-50 transition"
-            >
-              {submitting ? 'Procesando...' : 'Confirmar ingreso'}
-            </button>
+
+          <div className="flex items-center justify-between gap-4 pt-2">
+            <div className="text-sm text-gray-500">
+              {activeRows.length} fila{activeRows.length !== 1 ? 's' : ''} lista{activeRows.length !== 1 ? 's' : ''} para procesar
+            </div>
+            <div className="flex gap-3">
+              <button
+                type="button"
+                onClick={() => appendRow()}
+                className="px-4 py-2 border border-gray-200 rounded-lg text-sm font-medium text-gray-900 hover:bg-gray-50 transition"
+              >
+                Agregar fila
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirm}
+                disabled={submitting}
+                className="px-4 py-2 bg-green-600 text-white rounded-lg text-sm font-medium hover:opacity-90 disabled:opacity-50 transition"
+              >
+                {submitting ? 'Procesando...' : 'Confirmar ingreso'}
+              </button>
+            </div>
           </div>
         </div>
       </div>
