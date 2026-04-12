@@ -58,8 +58,8 @@ services:
     staticPublishPath: dist
     autoDeploy: true
     envVars:
-      - key: VITE_API_BASE_URL
-        value: https://stock-backend.onrender.com/api/v1
+      - key: VITE_API_URL
+        value: https://trod-g32z.onrender.com
     routes:
       - type: rewrite
         source: /*
