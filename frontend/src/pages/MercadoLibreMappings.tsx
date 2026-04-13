@@ -341,7 +341,7 @@ function MLMappingModal({
   };
 
   return (
-    <div className="fixed inset-0 bg-text-blue-700/40 flex items-center justify-center z-50 p-4">
+    <div className="app-modal-overlay bg-text-blue-700/40">
       <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg overflow-y-auto max-h-[calc(100vh-2rem)]">
         <div className="px-6 py-4 border-b border-gray-200 flex items-start justify-between gap-4">
           <div>
@@ -424,7 +424,7 @@ function ResolveUnmappedOrderModal({
   };
 
   return (
-    <div className="fixed inset-0 bg-text-blue-700/40 flex items-center justify-center z-50 p-4">
+    <div className="app-modal-overlay bg-text-blue-700/40">
       <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg overflow-y-auto max-h-[calc(100vh-2rem)]">
         <div className="px-6 py-4 border-b border-gray-200 flex items-start justify-between gap-4">
           <div>

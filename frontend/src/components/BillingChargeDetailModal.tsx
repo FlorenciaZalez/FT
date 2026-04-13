@@ -11,7 +11,7 @@ export default function BillingChargeDetailModal({
   onClose: () => void;
 }) {
   return (
-    <div className="fixed inset-0 bg-text-blue-700/40 flex items-center justify-center z-50 p-4">
+    <div className="app-modal-overlay bg-text-blue-700/40">
       <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl p-6 max-h-[calc(100vh-2rem)] overflow-y-auto">
         <div className="flex items-center justify-between mb-5">
           <div>

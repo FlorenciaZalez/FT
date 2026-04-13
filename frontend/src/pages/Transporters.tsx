@@ -369,7 +369,7 @@ function TransporterForm({
   };
 
   return (
-    <div className="fixed inset-0 bg-text-blue-700/40 flex items-center justify-center z-50">
+    <div className="app-modal-overlay bg-text-blue-700/40">
       <div className="bg-white rounded-2xl shadow-xl w-full max-w-xl p-6 max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-lg font-bold text-gray-900">
@@ -517,7 +517,7 @@ function TransporterForm({
       </div>
 
       {showDeleteConfirm && (
-        <div className="fixed inset-0 bg-text-blue-700/50 flex items-center justify-center z-[60] p-4">
+        <div className="app-modal-overlay bg-text-blue-700/50 z-[10001]">
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6 max-h-[calc(100vh-2rem)] overflow-y-auto">
             <h3 className="text-lg font-bold text-gray-900 mb-2">Eliminar transportista</h3>
             <p className="text-sm text-gray-500 mb-6">
@@ -597,7 +597,7 @@ function TransporterDocumentsModal({
   const currentStatus = DOCUMENT_STATUS_CONFIG[transporter.document_status];
 
   return (
-    <div className="fixed inset-0 bg-text-blue-700/40 flex items-center justify-center z-50 p-4">
+    <div className="app-modal-overlay bg-text-blue-700/40">
       <div className="bg-white rounded-2xl shadow-xl w-full max-w-5xl max-h-[90vh] overflow-hidden flex flex-col">
         <div className="flex items-start justify-between px-6 py-5 border-b border-gray-200">
           <div>

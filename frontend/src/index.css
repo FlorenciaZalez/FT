@@ -7,6 +7,7 @@
   --color-primary-hover-rgb: 63 94 230;
   --color-primary-active-rgb: 54 79 204;
   --color-primary-light-rgb: 238 242 255;
+  --app-overlay-top: calc(5.5rem + env(safe-area-inset-top));
 }
 
 @layer base {
@@ -41,6 +42,18 @@
 @layer components {
   .ui-btn-primary {
     @apply bg-primary text-white hover:bg-primary-hover active:bg-primary-active active:scale-[0.98] transition-all duration-150 ease-out;
+  }
+
+  .app-modal-overlay {
+    @apply fixed bottom-0 left-0 right-0 z-[9999] flex justify-center overflow-y-auto p-4;
+    top: var(--app-overlay-top);
+    align-items: flex-start;
+    overscroll-behavior: contain;
+  }
+
+  .app-modal-overlay > * {
+    max-height: calc(100dvh - var(--app-overlay-top) - 2rem) !important;
+    overflow-y: auto !important;
   }
 
   .table-scroll-container thead th {

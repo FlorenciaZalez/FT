@@ -728,7 +728,7 @@ export default function DispatchSession() {
 
       {/* Conflict resolution modal */}
       {conflict && (
-        <div className="fixed inset-0 bg-text-blue-700/40 flex items-center justify-center z-50 p-4">
+        <div className="app-modal-overlay bg-text-blue-700/40">
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg p-6 max-h-[calc(100vh-2rem)] overflow-y-auto">
             <div className="flex items-center justify-between mb-4">
               <div>
@@ -813,7 +813,7 @@ export default function DispatchSession() {
 
       {/* Confirm modal */}
       {showConfirm && (
-        <div className="fixed inset-0 bg-text-blue-700/40 flex items-center justify-center z-50 p-4">
+        <div className="app-modal-overlay bg-text-blue-700/40">
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6 max-h-[calc(100vh-2rem)] overflow-y-auto">
             <h3 className="text-lg font-bold text-gray-900 mb-3">{transportTransferMode ? 'Confirmar salida a transporte' : 'Confirmar despacho'}</h3>
 

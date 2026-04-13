@@ -636,7 +636,7 @@ export default function StockPage() {
         const isZero = avail === 0;
         const isLow = isLowStock(stock);
         return (
-          <div className="fixed inset-0 bg-text-blue-700/40 flex items-center justify-center z-50 p-4">
+          <div className="app-modal-overlay bg-text-blue-700/40">
             <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6 max-h-[calc(100vh-2rem)] overflow-y-auto">
               <div className="flex items-center justify-between mb-5">
                 <div>
@@ -755,7 +755,7 @@ function MerchandiseReceptionOverviewModal({
   onDelete: (recordId: number) => void;
 }) {
   return (
-    <div className="fixed inset-0 bg-text-blue-700/40 flex items-center justify-center z-50 p-4">
+    <div className="app-modal-overlay bg-text-blue-700/40">
       <div className="bg-white rounded-2xl shadow-xl w-full max-w-6xl max-h-[86vh] overflow-hidden flex flex-col">
         <div className="px-6 py-4 border-b border-gray-200 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div>
@@ -874,7 +874,7 @@ function MerchandiseReceptionModal({
   onSubmit: (event: FormEvent) => Promise<void>;
 }) {
   return (
-    <div className="fixed inset-0 bg-text-blue-700/40 flex items-center justify-center z-50 p-4">
+    <div className="app-modal-overlay bg-text-blue-700/40">
       <div className="bg-white rounded-2xl shadow-xl w-full max-w-[560px] overflow-y-auto max-h-[calc(100vh-2rem)]">
         <div className="px-6 py-4 border-b border-gray-200 flex items-start justify-between gap-4">
           <div>
@@ -1362,7 +1362,7 @@ function BulkStockEntryPanel({
   };
 
   return (
-    <div className="fixed inset-0 bg-text-blue-700/40 z-50 p-4 flex items-center justify-center">
+    <div className="app-modal-overlay bg-text-blue-700/40">
       <div className="bg-white rounded-2xl border border-green-200 shadow-xl w-full max-w-6xl max-h-[86vh] overflow-hidden flex flex-col">
         <div className="px-6 py-4 border-b border-green-200 bg-green-50 flex items-center justify-between gap-4">
           <div>
@@ -1730,7 +1730,7 @@ function StockMoveModal({
   };
 
   return (
-    <div className="fixed inset-0 bg-text-blue-700/40 flex items-center justify-center z-50 p-4">
+    <div className="app-modal-overlay bg-text-blue-700/40">
       <div className="bg-white rounded-2xl shadow-xl w-full max-w-[640px] p-6 max-h-[calc(100vh-2rem)] overflow-y-auto">
         <div className="flex items-center justify-between mb-5">
           <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2">
@@ -2019,7 +2019,7 @@ function MovementHistoryModal({
   };
 
   return (
-    <div className="fixed inset-0 bg-text-blue-700/40 flex items-center justify-center z-50">
+    <div className="app-modal-overlay bg-text-blue-700/40">
       <div className="bg-white rounded-2xl shadow-xl w-full max-w-xl p-6 max-h-[85vh] flex flex-col">
         <div className="flex items-center justify-between mb-4">
           <div>

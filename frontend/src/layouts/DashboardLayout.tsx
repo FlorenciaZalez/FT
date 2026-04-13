@@ -768,7 +768,7 @@ export default function DashboardLayout() {
       {renderSidebar()}
 
       <div className="flex min-h-0 flex-1">
-        {!collapsed && <div className="fixed inset-0 z-[9998] bg-black/10 backdrop-blur-[2px]" />}
+        {!collapsed && <div className="fixed bottom-0 left-0 right-0 z-[9998] bg-black/10 backdrop-blur-[2px]" style={{ top: 'var(--app-overlay-top)' }} />}
 
         <main className="ml-[72px] flex flex-1 flex-col overflow-y-auto overflow-x-hidden px-8 pb-8 pt-[104px]">
           <Outlet context={{ activeAlertCount, visibleAlertNoticeCount: alertNoticeCount, openAlertsPanel }} />
