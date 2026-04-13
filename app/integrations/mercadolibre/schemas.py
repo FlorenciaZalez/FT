@@ -59,3 +59,22 @@ class MLAccountResponse(BaseModel):
 
     class Config:
         orm_mode = True
+
+
+class MLWebhookNotification(BaseModel):
+    _id: str | None = None
+    topic: str | None = None
+    resource: str | None = None
+    user_id: int | None = None
+    application_id: int | None = None
+    attempts: int | None = None
+    sent: str | None = None
+    received: str | None = None
+
+
+class MLWebhookProcessResponse(BaseModel):
+    received: bool = True
+    processed: bool = False
+    action: str
+    detail: str
+    order_id: int | None = None

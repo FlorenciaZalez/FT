@@ -13,7 +13,13 @@ import {
 import { useAuth } from '../auth/AuthContext';
 import { fetchAlerts } from '../services/alerts';
 import type { Alert } from '../services/alerts';
-import { getMLAuthUrl, disconnectMLAccount, getMLAccount, type MLAccount } from '../services/mercadolibre';
+import {
+  getMLAuthUrl,
+  disconnectMLAccount,
+  getMLAccount,
+  getApiErrorMessage,
+  type MLAccount,
+} from '../services/mercadolibre';
 import { fetchOrders, fetchWorkloadStatus } from '../services/orders';
 import type { Order, WorkloadStatus } from '../services/orders';
 import { fetchStock, fetchStockMovements } from '../services/stock';
@@ -608,9 +614,11 @@ export default function Dashboard() {
                   onClick={async () => {
                     setMlLoading(true);
                     try {
+                      setClientError(null);
                       const url = await getMLAuthUrl(clientId);
                       window.location.href = url;
-                    } catch {
+                    } catch (error) {
+                      setClientError(getApiErrorMessage(error, 'No pudimos iniciar la conexión con Mercado Libre.'));
                       setMlLoading(false);
                     }
                   }}

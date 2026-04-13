@@ -1524,6 +1524,7 @@ function CreateOrderForm({
   const [products, setProducts] = useState<Product[]>([]);
   const [stockItems, setStockItems] = useState<StockItem[]>([]);
   const [orderMode, setOrderMode] = useState<'manual' | 'mercadolibre'>('manual');
+  const [shippingMode, setShippingMode] = useState<'domicilio' | 'correo'>('domicilio');
   const [operationType, setOperationType] = useState<'sale' | 'return' | 'exchange'>('sale');
   const [clientId, setClientId] = useState('');
   const [items, setItems] = useState<{ product_id: string; quantity: string }[]>([
@@ -1545,11 +1546,15 @@ function CreateOrderForm({
   const [addressReference, setAddressReference] = useState('');
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState('');
+  const [transporters, setTransporters] = useState<Transporter[]>([]);
+  const [selectedTransporterId, setSelectedTransporterId] = useState<string>('');
+  const [customCarrierName, setCustomCarrierName] = useState('');
 
   useEffect(() => {
     fetchClients().then((c) => setClients(c.filter((cl) => cl.is_active))).catch(() => {});
     fetchProducts().then((p) => setProducts(p.filter((pr) => pr.is_active))).catch(() => {});
     fetchStock().then(setStockItems).catch(() => {});
+    fetchTransporters(true).then(setTransporters).catch(() => {});
   }, []);
 
   const stockByProduct = useMemo(() => {
@@ -1565,6 +1570,12 @@ function CreateOrderForm({
     : [];
 
   const isMarketplaceMode = orderMode === 'mercadolibre';
+  const isCarrierDropoffMode = !isMarketplaceMode && operationType === 'sale' && shippingMode === 'correo';
+
+  const selectedTransporter = useMemo(
+    () => transporters.find((transporter) => String(transporter.id) === selectedTransporterId) ?? null,
+    [selectedTransporterId, transporters],
+  );
 
   const addItem = () => setItems((prev) => [...prev, { product_id: '', quantity: '1' }]);
   const addReturnItem = () => setReturnItems((prev) => [...prev, { product_id: '', quantity: '1' }]);
@@ -1630,11 +1641,22 @@ function CreateOrderForm({
           return;
         }
       }
+
+      if (isCarrierDropoffMode && !selectedTransporter && !customCarrierName.trim()) {
+        setFormError('Elegí un correo o ingresá el nombre del correo');
+        return;
+      }
     }
 
     setSaving(true);
     setFormError('');
     try {
+      const carrierLabel = selectedTransporter?.name || customCarrierName.trim();
+      const normalizedNotes = [
+        isCarrierDropoffMode && carrierLabel ? `Salida por correo: ${carrierLabel}` : null,
+        notes.trim() || null,
+      ].filter(Boolean).join(' · ');
+
       const order = await addOrder({
         client_id: parseInt(clientId),
         operation_type: isMarketplaceMode ? 'sale' : operationType,
@@ -1646,14 +1668,14 @@ function CreateOrderForm({
         ml_item_id: isMarketplaceMode ? mlItemId || undefined : undefined,
         variation_id: isMarketplaceMode ? variationId || undefined : undefined,
         quantity: isMarketplaceMode ? parseInt(requestedQuantity) : undefined,
-        zip_code: postalCode || undefined,
-        buyer_name: buyerName || undefined,
-        address_line: addressLine || undefined,
-        city: city || undefined,
-        state: state || undefined,
-        postal_code: postalCode || undefined,
-        address_reference: addressReference || undefined,
-        notes: notes || undefined,
+        zip_code: isCarrierDropoffMode ? undefined : postalCode || undefined,
+        buyer_name: isCarrierDropoffMode ? undefined : buyerName || undefined,
+        address_line: isCarrierDropoffMode ? undefined : addressLine || undefined,
+        city: isCarrierDropoffMode ? undefined : city || undefined,
+        state: isCarrierDropoffMode ? undefined : state || undefined,
+        postal_code: isCarrierDropoffMode ? undefined : postalCode || undefined,
+        address_reference: isCarrierDropoffMode ? undefined : addressReference || undefined,
+        notes: normalizedNotes || undefined,
       });
       onCreated(order);
     } catch (err: unknown) {
@@ -1666,10 +1688,57 @@ function CreateOrderForm({
 
   return (
     <div className="bg-white rounded-xl border border-gray-200 p-6 mb-6">
-      <h2 className="text-lg font-bold text-gray-900 mb-4">Nuevo pedido</h2>
+      <div className="mb-4 flex items-center justify-between gap-3">
+        <h2 className="text-lg font-bold text-gray-900">Nuevo pedido</h2>
+        {!isMarketplaceMode && operationType === 'sale' && (
+          <button
+            type="button"
+            onClick={() => setShippingMode((current) => (current === 'domicilio' ? 'correo' : 'domicilio'))}
+            className={`rounded-lg border px-3 py-2 text-xs font-semibold transition ${
+              shippingMode === 'correo'
+                ? 'border-blue-600 bg-blue-50 text-blue-700'
+                : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300'
+            }`}
+          >
+            {shippingMode === 'correo' ? 'Modo correo activo' : 'Elegir Correo'}
+          </button>
+        )}
+      </div>
       <p className="text-sm text-gray-500 mb-4">
         Al guardar, el sistema intenta asignar cordón y costo de envío automáticamente según código postal y categoría de peso.
       </p>
+
+      {isCarrierDropoffMode && (
+        <div className="mb-4 rounded-xl border border-blue-200 bg-blue-50/70 p-4">
+          <p className="text-sm font-semibold text-blue-700">Pedido para entregar en correo</p>
+          <p className="mt-1 text-xs text-blue-700/90">No se requiere dirección del comprador. Solo elegí por qué correo sale.</p>
+          <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">
+            <div>
+              <label className="mb-1 block text-xs text-gray-500">Correo registrado</label>
+              <select
+                value={selectedTransporterId}
+                onChange={(e) => setSelectedTransporterId(e.target.value)}
+                className="w-full rounded-lg border border-blue-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-blue-300 focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="">Seleccionar correo...</option>
+                {transporters.map((transporter) => (
+                  <option key={transporter.id} value={transporter.id}>{transporter.name}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="mb-1 block text-xs text-gray-500">O escribir correo manual</label>
+              <input
+                type="text"
+                value={customCarrierName}
+                onChange={(e) => setCustomCarrierName(e.target.value)}
+                className="w-full rounded-lg border border-blue-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-blue-300 focus:ring-2 focus:ring-blue-500"
+                placeholder="Ej: Correo Argentino"
+              />
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 gap-3 mb-4 sm:grid-cols-2">
         <button
@@ -1905,74 +1974,75 @@ function CreateOrderForm({
           </div>
         )}
 
-        {/* Dirección de envío */}
-        <div className="border-t border-gray-200 pt-4">
-          <label className="block text-sm font-medium text-gray-900 mb-3">Dirección de envío</label>
-          <div className="space-y-3">
-            <div>
-              <label className="block text-xs text-gray-500 mb-1">Nombre del comprador</label>
-              <input
-                type="text"
-                value={buyerName}
-                onChange={(e) => setBuyerName(e.target.value)}
-                className="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
-                placeholder="Juan Pérez"
-              />
-            </div>
-            <div>
-              <label className="block text-xs text-gray-500 mb-1">Dirección</label>
-              <input
-                type="text"
-                value={addressLine}
-                onChange={(e) => setAddressLine(e.target.value)}
-                className="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
-                placeholder="Av. Corrientes 1234, Piso 5"
-              />
-            </div>
-            <div className="grid grid-cols-3 gap-3">
+        {!isCarrierDropoffMode && (
+          <div className="border-t border-gray-200 pt-4">
+            <label className="block text-sm font-medium text-gray-900 mb-3">Dirección de envío</label>
+            <div className="space-y-3">
               <div>
-                <label className="block text-xs text-gray-500 mb-1">Localidad</label>
+                <label className="block text-xs text-gray-500 mb-1">Nombre del comprador</label>
                 <input
                   type="text"
-                  value={city}
-                  onChange={(e) => setCity(e.target.value)}
-                  className="w-full px-3 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
-                  placeholder="CABA"
+                  value={buyerName}
+                  onChange={(e) => setBuyerName(e.target.value)}
+                  className="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                  placeholder="Juan Pérez"
                 />
               </div>
               <div>
-                <label className="block text-xs text-gray-500 mb-1">Provincia</label>
+                <label className="block text-xs text-gray-500 mb-1">Dirección</label>
                 <input
                   type="text"
-                  value={state}
-                  onChange={(e) => setState(e.target.value)}
-                  className="w-full px-3 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
-                  placeholder="Buenos Aires"
+                  value={addressLine}
+                  onChange={(e) => setAddressLine(e.target.value)}
+                  className="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                  placeholder="Av. Corrientes 1234, Piso 5"
                 />
+              </div>
+              <div className="grid grid-cols-3 gap-3">
+                <div>
+                  <label className="block text-xs text-gray-500 mb-1">Localidad</label>
+                  <input
+                    type="text"
+                    value={city}
+                    onChange={(e) => setCity(e.target.value)}
+                    className="w-full px-3 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                    placeholder="CABA"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-500 mb-1">Provincia</label>
+                  <input
+                    type="text"
+                    value={state}
+                    onChange={(e) => setState(e.target.value)}
+                    className="w-full px-3 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                    placeholder="Buenos Aires"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-500 mb-1">C.P.</label>
+                  <input
+                    type="text"
+                    value={postalCode}
+                    onChange={(e) => setPostalCode(e.target.value)}
+                    className="w-full px-3 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                    placeholder="1000"
+                  />
+                </div>
               </div>
               <div>
-                <label className="block text-xs text-gray-500 mb-1">C.P.</label>
+                <label className="block text-xs text-gray-500 mb-1">Referencia <span className="text-gray-500">(opcional)</span></label>
                 <input
                   type="text"
-                  value={postalCode}
-                  onChange={(e) => setPostalCode(e.target.value)}
-                  className="w-full px-3 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
-                  placeholder="1000"
+                  value={addressReference}
+                  onChange={(e) => setAddressReference(e.target.value)}
+                  className="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                  placeholder="Ej: entre calles, timbre, portería..."
                 />
               </div>
-            </div>
-            <div>
-              <label className="block text-xs text-gray-500 mb-1">Referencia <span className="text-gray-500">(opcional)</span></label>
-              <input
-                type="text"
-                value={addressReference}
-                onChange={(e) => setAddressReference(e.target.value)}
-                className="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
-                placeholder="Ej: entre calles, timbre, portería..."
-              />
             </div>
           </div>
-        </div>
+        )}
 
         {/* Notes */}
         <div>

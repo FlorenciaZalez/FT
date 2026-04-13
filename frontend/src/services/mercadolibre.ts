@@ -1,4 +1,5 @@
 import api from '../api/api';
+import axios from 'axios';
 
 export interface MLAccount {
   id: number;
@@ -75,4 +76,14 @@ export async function updateMLMapping(id: number, payload: Partial<MLMappingPayl
 
 export async function deleteMLMapping(id: number): Promise<void> {
   await api.delete(`/integrations/ml/mappings/${id}`);
+}
+
+export function getApiErrorMessage(error: unknown, fallback: string): string {
+  if (axios.isAxiosError(error)) {
+    const detail = error.response?.data?.detail;
+    if (typeof detail === 'string' && detail.trim()) {
+      return detail;
+    }
+  }
+  return fallback;
 }

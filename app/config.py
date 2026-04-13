@@ -19,6 +19,7 @@ class Settings(BaseSettings):
     ML_CLIENT_ID: str = ""
     ML_CLIENT_SECRET: str = ""
     ML_REDIRECT_URI: str = "http://localhost:5173/integrations/ml/callback"
+    ML_FRONTEND_CALLBACK_URL: str = "http://localhost:5173/#/integrations/ml/callback"
 
     # App
     APP_ENV: str = "development"

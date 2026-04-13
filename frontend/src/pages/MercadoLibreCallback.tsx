@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
-import { mlCallback } from '../services/mercadolibre';
+import { getApiErrorMessage, mlCallback } from '../services/mercadolibre';
 
 export default function MercadoLibreCallback() {
   const [searchParams] = useSearchParams();
@@ -29,9 +29,9 @@ export default function MercadoLibreCallback() {
         setStatus('success');
         setTimeout(() => navigate(`/clients/${clientId}`), 2000);
       })
-      .catch(() => {
+      .catch((error: unknown) => {
         setStatus('error');
-        setErrorMsg('Error al conectar la cuenta de Mercado Libre');
+        setErrorMsg(getApiErrorMessage(error, 'Error al conectar la cuenta de Mercado Libre'));
       });
   }, [code, parsedClientId, validationError, navigate]);
 
