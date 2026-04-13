@@ -15,7 +15,7 @@ export type LabelGenerationResult = {
   blobUrl: string;
 };
 
-const LABEL_WIDTH_MM = 40;
+const LABEL_WIDTH_MM = 50;
 const LABEL_HEIGHT_MM = 30;
 const LABEL_BARCODE_WIDTH_MM = 34;
 const LABEL_BARCODE_HEIGHT_MM = 10;
@@ -188,7 +188,7 @@ function buildPrintDocument(labels: LabelProduct[]): string {
       }
 
       @page {
-        size: 40mm 30mm;
+        size: 50mm 30mm;
         margin: 0;
       }
 
@@ -330,7 +330,7 @@ function buildPrintDocument(labels: LabelProduct[]): string {
   <body>
     <div class="preview-root">
       <div class="preview-toolbar">
-        <span>Vista previa de etiqueta 40 mm x 30 mm</span>
+        <span>Vista previa de etiqueta 50 mm x 30 mm</span>
         <span>Imprimiendo...</span>
       </div>
       <div class="preview-scale">
