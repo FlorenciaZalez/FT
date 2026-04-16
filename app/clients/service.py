@@ -7,7 +7,8 @@ from app.clients.models import Client, PlanType
 from app.orders.models import Order
 from app.products.models import Product
 from app.stock.models import Stock
-from app.common.exceptions import NotFoundError, ConflictError
+from app.auth.models import UserRole
+from app.common.exceptions import NotFoundError, ConflictError, ForbiddenError
 
 
 def _client_with_relations():
@@ -15,6 +16,16 @@ def _client_with_relations():
         selectinload(Client.ml_account),
         selectinload(Client.billing_schedule),
     )
+
+
+def _scope_client_query(query, user=None):
+    if user is None:
+        return query
+    if user.role in (UserRole.admin, UserRole.operator):
+        return query
+    if user.client_id is None:
+        raise ForbiddenError("User has no associated client")
+    return query.where(Client.id == user.client_id)
 
 
 async def _upsert_billing_schedule(db: AsyncSession, client: Client, day_of_month: int | None) -> None:
@@ -33,18 +44,19 @@ async def _upsert_billing_schedule(db: AsyncSession, client: Client, day_of_mont
     schedule.active = True
 
 
-async def list_clients(db: AsyncSession, skip: int = 0, limit: int = 50) -> tuple[list[Client], int]:
-    total_q = await db.execute(select(func.count(Client.id)))
+async def list_clients(db: AsyncSession, user=None, skip: int = 0, limit: int = 50) -> tuple[list[Client], int]:
+    base_ids_query = _scope_client_query(select(Client.id), user)
+    total_q = await db.execute(select(func.count()).select_from(base_ids_query.subquery()))
     total = total_q.scalar_one()
 
-    result = await db.execute(
-        _client_with_relations().order_by(Client.id).offset(skip).limit(limit)
-    )
+    query = _scope_client_query(_client_with_relations().order_by(Client.id), user)
+    result = await db.execute(query.offset(skip).limit(limit))
     return result.scalars().all(), total
 
 
-async def get_client(db: AsyncSession, client_id: int) -> Client:
-    result = await db.execute(_client_with_relations().where(Client.id == client_id))
+async def get_client(db: AsyncSession, client_id: int, user=None) -> Client:
+    query = _scope_client_query(_client_with_relations().where(Client.id == client_id), user)
+    result = await db.execute(query)
     client = result.scalar_one_or_none()
     if client is None:
         raise NotFoundError(f"Client {client_id} not found")

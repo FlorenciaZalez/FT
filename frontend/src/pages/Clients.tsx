@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo, type FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useClients } from '../hooks/useClients';
+import { useAuth } from '../auth/AuthContext';
 import { fetchOrders, type Order } from '../services/orders';
 import { fetchStock, type StockItem } from '../services/stock';
 import type { Client, ClientCreatePayload, ClientUpdatePayload } from '../services/clients';
@@ -47,7 +48,9 @@ function formatLastActivity(iso: string | undefined): string {
 
 export default function Clients() {
   const { clients, loading, error, add, update, toggleActive } = useClients();
+  const { user } = useAuth();
   const navigate = useNavigate();
+  const isAdmin = user?.role === 'admin';
 
   const [showForm, setShowForm] = useState(false);
   const [editingClient, setEditingClient] = useState<Client | null>(null);
@@ -132,12 +135,14 @@ export default function Clients() {
           <h1 className="text-2xl font-bold text-gray-900">Clientes</h1>
           <p className="text-gray-500 text-sm mt-1">Gestioná los clientes del depósito</p>
         </div>
-        <button
-          onClick={() => setShowForm(true)}
-          className="ui-btn-primary px-4 py-2 rounded-lg text-sm font-medium"
-        >
-          + Nuevo cliente
-        </button>
+        {isAdmin && (
+          <button
+            onClick={() => setShowForm(true)}
+            className="ui-btn-primary px-4 py-2 rounded-lg text-sm font-medium"
+          >
+            + Nuevo cliente
+          </button>
+        )}
       </div>
 
       {showForm && (
@@ -228,23 +233,27 @@ export default function Clients() {
                       >
                         Ver
                       </button>
-                      <button
-                        onClick={() => setEditingClient(c)}
-                        className="px-3 py-1.5 text-xs font-medium text-blue-700 bg-blue-50 rounded-lg hover:bg-blue-50 transition"
-                      >
-                        Editar
-                      </button>
-                      <button
-                        onClick={() => setConfirmToggle(c)}
-                        disabled={actionLoading === c.id}
-                        className={`px-3 py-1.5 text-xs font-medium rounded-lg transition disabled:opacity-50 ${
-                          c.is_active
-                            ? 'text-red-700 bg-red-50 hover:bg-red-50'
-                            : 'text-green-700 bg-green-50 hover:bg-green-50'
-                        }`}
-                      >
-                        {actionLoading === c.id ? '...' : c.is_active ? 'Desactivar' : 'Activar'}
-                      </button>
+                      {isAdmin && (
+                        <>
+                          <button
+                            onClick={() => setEditingClient(c)}
+                            className="px-3 py-1.5 text-xs font-medium text-blue-700 bg-blue-50 rounded-lg hover:bg-blue-50 transition"
+                          >
+                            Editar
+                          </button>
+                          <button
+                            onClick={() => setConfirmToggle(c)}
+                            disabled={actionLoading === c.id}
+                            className={`px-3 py-1.5 text-xs font-medium rounded-lg transition disabled:opacity-50 ${
+                              c.is_active
+                                ? 'text-red-700 bg-red-50 hover:bg-red-50'
+                                : 'text-green-700 bg-green-50 hover:bg-green-50'
+                            }`}
+                          >
+                            {actionLoading === c.id ? '...' : c.is_active ? 'Desactivar' : 'Activar'}
+                          </button>
+                        </>
+                      )}
                     </div>
                   </td>
                 </tr>

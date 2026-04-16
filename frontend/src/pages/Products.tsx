@@ -261,7 +261,7 @@ export default function Products() {
                     )}
                   </td>
                   <td className="px-6 py-4 text-gray-500">
-                    {clientMap.get(p.client_id) ?? `#${p.client_id}`}
+                    {clientMap.get(p.client_id) ?? `Cliente ${p.client_id}`}
                   </td>
                   <td className="px-6 py-4">
                     {p.location_code ? (

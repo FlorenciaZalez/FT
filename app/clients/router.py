@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
-from app.auth.dependencies import require_admin
+from app.auth.dependencies import require_admin, require_any
 from app.auth.models import User
 from app.clients import service
 from app.clients.schemas import ClientCreate, ClientUpdate, ClientResponse
@@ -14,10 +14,10 @@ router = APIRouter(prefix="/clients", tags=["Clients"])
 async def list_clients(
     skip: int = Query(0, ge=0),
     limit: int = Query(1000, ge=1, le=5000),
-    admin: User = Depends(require_admin),
+    user: User = Depends(require_any),
     db: AsyncSession = Depends(get_db),
 ):
-    clients, total = await service.list_clients(db, skip, limit)
+    clients, total = await service.list_clients(db, user, skip, limit)
     return clients
 
 
@@ -33,10 +33,10 @@ async def create_client(
 @router.get("/{client_id}", response_model=ClientResponse)
 async def get_client(
     client_id: int,
-    admin: User = Depends(require_admin),
+    user: User = Depends(require_any),
     db: AsyncSession = Depends(get_db),
 ):
-    return await service.get_client(db, client_id)
+    return await service.get_client(db, client_id, user)
 
 
 @router.put("/{client_id}", response_model=ClientResponse)
