@@ -56,6 +56,15 @@
     overflow-y: auto !important;
   }
 
+  .table-scroll-container {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .table-scroll-container table {
+    min-width: 720px;
+  }
+
   .table-scroll-container thead th {
     @apply sticky top-0 z-10 bg-white;
   }
@@ -79,6 +88,10 @@
 
     .app-modal-panel {
       max-height: calc(100dvh - 3rem);
+    }
+
+    .table-scroll-container table {
+      min-width: 0;
     }
   }
 }

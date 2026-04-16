@@ -416,8 +416,8 @@ export default function Dashboard() {
       : [];
 
     return (
-      <div className="space-y-5">
-        <section className="rounded-2xl border border-gray-200 bg-white px-5 py-5 shadow-sm sm:px-6 sm:py-6">
+      <div className="space-y-4 sm:space-y-5">
+        <section className="rounded-2xl border border-gray-200 bg-white px-4 py-4 shadow-sm sm:px-6 sm:py-6">
           <div className="space-y-5">
             <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
               <div>
@@ -425,11 +425,11 @@ export default function Dashboard() {
                   <span className="h-2.5 w-2.5 rounded-full bg-[#7E00D5]" />
                   Dashboard en vivo
                 </div>
-                <h1 className="mt-3 text-2xl font-bold tracking-tight text-[#3F63E8] sm:text-[2rem]">Resumen rápido de tu operación.</h1>
+                <h1 className="mt-3 text-xl font-bold tracking-tight text-[#3F63E8] sm:text-[2rem]">Resumen rápido de tu operación.</h1>
                 <p className="mt-1 text-sm text-gray-500">Stock, movimiento y facturación en una sola vista.</p>
               </div>
 
-              <div className="flex items-center gap-3 self-start rounded-xl border border-gray-200 bg-white px-4 py-2.5">
+              <div className="flex w-full items-center justify-between gap-3 self-start rounded-xl border border-gray-200 bg-white px-4 py-2.5 sm:w-auto sm:justify-normal">
                 <div>
                   <p className="text-xs uppercase tracking-[0.22em] text-gray-400">Actualizado</p>
                   <p className="mt-1 text-sm font-medium text-gray-900">{formatClock(clientLastUpdatedAt)}</p>
@@ -445,7 +445,7 @@ export default function Dashboard() {
               </div>
             </div>
 
-            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
               {clientCards.map((card) => {
                 const Icon = card.icon;
                 const isInteractive = Boolean(card.link);
@@ -462,7 +462,7 @@ export default function Dashboard() {
                       {isInteractive ? <ArrowUpRight size={16} className="text-gray-500" /> : <span className="h-4 w-4" />}
                     </div>
                     <p className="mt-4 text-sm text-gray-600">{card.label}</p>
-                    <p className="mt-1 text-4xl font-semibold leading-none tracking-tight text-gray-900">{card.value}</p>
+                    <p className="mt-1 text-3xl font-semibold leading-none tracking-tight text-gray-900 sm:text-4xl">{card.value}</p>
                     <p className={`mt-2 text-sm font-medium ${card.accent}`}>{card.detail}</p>
                     <p className="mt-0.5 text-xs text-gray-600">{card.helper}</p>
                   </div>
@@ -470,8 +470,8 @@ export default function Dashboard() {
               })}
             </div>
 
-            <div className="grid gap-3 xl:grid-cols-[1.2fr_0.8fr_1fr]">
-              <div className="rounded-xl border border-gray-200 bg-white p-4">
+            <div className="grid min-w-0 gap-3 xl:grid-cols-[1.2fr_0.8fr_1fr]">
+              <div className="min-w-0 overflow-hidden rounded-xl border border-gray-200 bg-white p-4">
                 <div className="flex items-center justify-between gap-3">
                   <div>
                     <p className="text-xs font-semibold uppercase tracking-[0.22em] text-gray-400">Despachos esta semana</p>
@@ -479,11 +479,12 @@ export default function Dashboard() {
                   </div>
                 </div>
 
-                <div className="mt-5 flex h-32 items-end gap-2 sm:gap-3">
-                  {(clientSnapshot?.weeklyBars ?? []).map((item) => {
-                    const height = `${Math.max((item.value / maxWeeklyValue) * 100, item.value > 0 ? 22 : 14)}%`;
-                    return (
-                      <div key={item.key} className="flex flex-1 flex-col items-center gap-2">
+                <div className="overflow-hidden pb-1">
+                  <div className="mt-5 grid h-32 grid-cols-7 items-end gap-2 sm:gap-3">
+                    {(clientSnapshot?.weeklyBars ?? []).map((item) => {
+                      const height = `${Math.max((item.value / maxWeeklyValue) * 100, item.value > 0 ? 22 : 14)}%`;
+                      return (
+                        <div key={item.key} className="flex min-w-0 flex-col items-center gap-2">
                         <div className="flex h-full w-full items-end rounded-2xl bg-gray-100 p-1">
                           <div
                             className={`w-full rounded-xl ${item.value > 0 ? 'bg-[#5B6CF0]' : 'bg-gray-200'}`}
@@ -494,13 +495,14 @@ export default function Dashboard() {
                           <div className={`text-xs font-semibold ${item.isToday ? 'text-gray-900' : 'text-gray-500'}`}>{item.label}</div>
                           <div className="mt-0.5 text-xs text-gray-400">{item.value}</div>
                         </div>
-                      </div>
-                    );
-                  })}
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
               </div>
 
-              <div className="rounded-xl border border-gray-200 bg-white p-4">
+              <div className="min-w-0 overflow-hidden rounded-xl border border-gray-200 bg-white p-4">
                 <div className="flex items-center justify-between gap-3">
                   <div>
                     <p className="text-xs font-semibold uppercase tracking-[0.22em] text-gray-400">Stock</p>
@@ -528,7 +530,7 @@ export default function Dashboard() {
                 </div>
               </div>
 
-              <div className="rounded-xl border border-gray-200 bg-white p-4">
+              <div className="min-w-0 overflow-hidden rounded-xl border border-gray-200 bg-white p-4">
                 <div className="flex items-center justify-between gap-3">
                   <div>
                     <p className="text-xs font-semibold uppercase tracking-[0.22em] text-gray-400">Actividad reciente</p>
@@ -537,11 +539,11 @@ export default function Dashboard() {
                   <Activity size={16} className="text-gray-400" />
                 </div>
 
-                <div className="mt-4 space-y-2.5">
-                  {(clientSnapshot?.activity ?? []).length > 0 ? (clientSnapshot?.activity ?? []).slice(0, 4).map((item) => {
+                <div className="mt-4 max-h-[22rem] space-y-2.5 overflow-y-auto pr-1">
+                  {(clientSnapshot?.activity ?? []).length > 0 ? (clientSnapshot?.activity ?? []).map((item) => {
                     const Icon = item.icon;
                     return (
-                      <div key={item.id} className="flex items-center gap-3 rounded-xl bg-gray-50 px-3 py-2.5">
+                      <div key={item.id} className="flex min-w-0 flex-col items-start gap-2 rounded-xl bg-gray-50 px-3 py-2.5 sm:flex-row sm:items-center sm:gap-3">
                         <span className={`flex h-9 w-9 items-center justify-center rounded-xl ${getToneClasses(item.tone)}`}>
                           <Icon size={16} />
                         </span>
@@ -549,7 +551,7 @@ export default function Dashboard() {
                           <p className="truncate text-sm font-medium text-gray-900">{item.title}</p>
                           <p className="truncate text-xs text-gray-500">{item.subtitle}</p>
                         </div>
-                        <span className="shrink-0 text-xs text-gray-400">{formatRelativeTime(item.createdAt)}</span>
+                        <span className="self-end text-[11px] text-gray-400 sm:self-auto sm:shrink-0 sm:text-xs">{formatRelativeTime(item.createdAt)}</span>
                       </div>
                     );
                   }) : (

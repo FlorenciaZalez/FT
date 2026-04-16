@@ -5,12 +5,14 @@ import {
   Boxes,
   ChevronRight,
   LayoutDashboard,
+  Menu,
   Plug,
   Receipt,
   Settings,
   ShoppingBag,
   Truck,
   Users,
+  X,
   type LucideIcon,
 } from 'lucide-react';
 import { useAuth } from '../auth/AuthContext';
@@ -335,6 +337,9 @@ export default function DashboardLayout() {
   const [lastSeenAt, setLastSeenAt] = useState<string | null>(() => getStoredAlertsLastSeen());
   const [openSection, setOpenSection] = useState<string | null>(null);
   const [collapsed, setCollapsed] = useState(true);
+  const [isMobile, setIsMobile] = useState(() => (typeof window !== 'undefined' ? window.innerWidth < 768 : false));
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [viewportHeight, setViewportHeight] = useState(() => (typeof window !== 'undefined' ? window.innerHeight : 900));
   const bellRef = useRef<HTMLDivElement>(null);
   const closeSidebarTimeoutRef = useRef<number | null>(null);
 
@@ -462,7 +467,70 @@ export default function DashboardLayout() {
     })
     .filter((entry): entry is SidebarEntry => entry !== null);
 
-  const sidebarBaseHeight = visibleMenu.length * 48 + Math.max(visibleMenu.length - 1, 0) * 8 + 32;
+  const sidebarEntries = (() => {
+    if (isMobile || user?.role === 'client') {
+      return visibleMenu;
+    }
+
+    const availableHeight = Math.max(viewportHeight - 220, 0);
+    const maxTopLevelItems = Math.max(5, Math.floor((availableHeight - 32) / 56));
+
+    if (visibleMenu.length <= maxTopLevelItems) {
+      return visibleMenu;
+    }
+
+    const preferredFoldKeys = new Set(['configuracion', 'finanzas', 'integraciones', 'logistica']);
+    const keptEntries = [...visibleMenu];
+    const foldedEntries: SidebarEntry[] = [];
+
+    for (let index = keptEntries.length - 1; index >= 0 && keptEntries.length > maxTopLevelItems - 1; index -= 1) {
+      const entry = keptEntries[index];
+      if (entry.type === 'section' && preferredFoldKeys.has(entry.key)) {
+        foldedEntries.unshift(...keptEntries.splice(index, 1));
+      }
+    }
+
+    while (keptEntries.length > maxTopLevelItems - 1) {
+      const entry = keptEntries.pop();
+      if (entry) {
+        foldedEntries.unshift(entry);
+      }
+    }
+
+    if (foldedEntries.length === 0) {
+      return visibleMenu;
+    }
+
+    const overflowChildren: SidebarChild[] = foldedEntries.flatMap((entry) => {
+      if (entry.type === 'item') {
+        return [{ label: entry.label, path: entry.path, badge: entry.badge }];
+      }
+
+      if (entry.children.length === 1) {
+        const child = entry.children[0];
+        return [{ label: entry.label, path: child.path, badge: child.badge }];
+      }
+
+      return entry.children.map((child) => ({
+        ...child,
+        label: `${entry.label} · ${child.label}`,
+      }));
+    });
+
+    return [
+      ...keptEntries,
+      {
+        type: 'section',
+        key: 'more',
+        label: 'Más',
+        icon: Menu,
+        badge: { value: foldedEntries.length, tone: 'primary' },
+        children: overflowChildren,
+      } satisfies SidebarGroup,
+    ];
+  })();
+
+  const sidebarBaseHeight = sidebarEntries.length * 48 + Math.max(sidebarEntries.length - 1, 0) * 8 + 32;
 
   const refreshAlerts = useCallback(async () => {
     try {
@@ -576,17 +644,48 @@ export default function DashboardLayout() {
     };
   }, []);
 
-  const renderSidebar = () => (
+  useEffect(() => {
+    const updateViewport = () => {
+      const mobile = window.innerWidth < 768;
+      setIsMobile(mobile);
+      setViewportHeight(window.innerHeight);
+      if (mobile) {
+        setCollapsed(true);
+      } else {
+        setMobileMenuOpen(false);
+      }
+    };
+
+    updateViewport();
+    window.addEventListener('resize', updateViewport);
+    return () => window.removeEventListener('resize', updateViewport);
+  }, []);
+
+  const handleNavSelection = () => {
+    setBellOpen(false);
+    setOpenSection(null);
+    setCollapsed(true);
+    setMobileMenuOpen(false);
+  };
+
+  const renderSidebar = () => {
+    if (isMobile) return null;
+
+    return (
     <aside
       className={[
-        'fixed left-0 top-1/2 z-[9999] -translate-y-1/2 overflow-visible transition-[width] duration-300 ease-out max-h-[calc(100vh-112px)]',
+        'fixed left-0 z-[9999] overflow-visible transition-[width] duration-300 ease-out',
         collapsed ? 'w-[72px]' : 'w-[260px]',
       ].join(' ')}
+      style={{ top: 'calc(var(--app-overlay-top) + 0.35rem)' }}
       onMouseEnter={() => handleOverlayOpen()}
       onMouseLeave={scheduleOverlayClose}
     >
       <div
-        style={{ minHeight: `${sidebarBaseHeight}px` }}
+        style={{
+          minHeight: `${sidebarBaseHeight}px`,
+          maxHeight: 'calc(100dvh - var(--app-overlay-top) - 1rem)',
+        }}
         className={[
           'ml-4 flex h-auto max-h-[calc(100vh-112px)] flex-col overflow-hidden rounded-2xl border border-white/20 bg-white/85 py-4 shadow-[0_20px_60px_rgba(0,0,0,0.15)] backdrop-blur-xl transition-[width,background-color,box-shadow] duration-300 ease-out',
           collapsed ? 'w-[64px]' : 'w-[244px]',
@@ -594,7 +693,7 @@ export default function DashboardLayout() {
       >
         {collapsed ? (
           <nav className="min-h-0 flex flex-1 flex-col items-center gap-2 overflow-y-auto overflow-x-hidden px-2">
-            {visibleMenu.map((entry) => {
+            {sidebarEntries.map((entry) => {
               const Icon = entry.icon;
               const active = isEntryActive(entry, location.pathname);
 
@@ -621,7 +720,7 @@ export default function DashboardLayout() {
         ) : (
           <nav className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-3 animate-[sidebar-overlay-in_260ms_ease-out_both]">
             <div className="space-y-2">
-              {visibleMenu.map((entry, index) => {
+              {sidebarEntries.map((entry, index) => {
                 if (entry.type === 'item') {
                   return (
                     <SidebarItem
@@ -633,10 +732,7 @@ export default function DashboardLayout() {
                       collapsed={false}
                       overlay
                       index={index}
-                      onSelect={() => {
-                        setOpenSection(null);
-                        setCollapsed(true);
-                      }}
+                      onSelect={handleNavSelection}
                     />
                   );
                 }
@@ -651,10 +747,7 @@ export default function DashboardLayout() {
                     collapsed={false}
                     overlay
                     index={index}
-                    onItemSelect={() => {
-                      setOpenSection(null);
-                      setCollapsed(true);
-                    }}
+                    onItemSelect={handleNavSelection}
                   />
                 );
               })}
@@ -663,13 +756,85 @@ export default function DashboardLayout() {
         )}
       </div>
     </aside>
-  );
+    );
+  };
+
+  const renderMobileDrawer = () => {
+    if (!isMobile || !mobileMenuOpen) return null;
+
+    return (
+      <>
+        <button
+          type="button"
+          aria-label="Cerrar menú"
+          onClick={() => setMobileMenuOpen(false)}
+          className="fixed inset-0 z-[9998] bg-slate-950/35 backdrop-blur-[1px] md:hidden"
+        />
+        <aside className="fixed inset-y-0 left-0 z-[10001] w-[min(88vw,320px)] overflow-y-auto border-r border-gray-200 bg-white px-3 py-4 shadow-[0_20px_60px_rgba(0,0,0,0.18)] md:hidden">
+          <div className="mb-4 flex items-center justify-between px-1">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.22em] text-gray-400">Navegación</p>
+              <p className="text-sm font-semibold text-gray-900">Panel TROD</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setMobileMenuOpen(false)}
+              className="flex h-10 w-10 items-center justify-center rounded-xl border border-gray-200 text-gray-600"
+              aria-label="Cerrar menú"
+            >
+              <X size={18} />
+            </button>
+          </div>
+
+          <nav className="space-y-2">
+            {visibleMenu.map((entry, index) => {
+              if (entry.type === 'item') {
+                return (
+                  <SidebarItem
+                    key={`${entry.key}-mobile`}
+                    label={entry.label}
+                    path={entry.path}
+                    badge={entry.badge}
+                    icon={entry.icon}
+                    onSelect={handleNavSelection}
+                    index={index}
+                  />
+                );
+              }
+
+              return (
+                <SidebarSection
+                  key={`${entry.key}-mobile`}
+                  entry={entry}
+                  currentPath={location.pathname}
+                  isOpen={openSection === entry.key}
+                  onToggle={handleSectionToggle}
+                  index={index}
+                  onItemSelect={handleNavSelection}
+                />
+              );
+            })}
+          </nav>
+        </aside>
+      </>
+    );
+  };
+
+  const mobileNavItems = visibleMenu.filter((entry): entry is SidebarLeaf => entry.type === 'item').slice(0, 4);
 
   return (
     <div className="relative flex h-screen flex-col overflow-x-hidden bg-gray-50 text-gray-900 [@keyframes_fade-slide-in]:from{opacity:0;transform:translateX(-10px)} [@keyframes_fade-slide-in]:to{opacity:1;transform:translateX(0)} [@keyframes_sidebar-overlay-in]:from{opacity:0;transform:translateX(-18px);opacity:0} [@keyframes_sidebar-overlay-in]:to{opacity:1;transform:translateX(0)}">
-      <header className="fixed left-0 right-0 top-4 z-[10000] px-6">
-        <div className="flex h-16 items-center rounded-2xl border border-white/20 bg-white/90 px-6 shadow-[0_8px_25px_rgba(0,0,0,0.06)] backdrop-blur-xl">
-          <div className="flex flex-1 items-center">
+      <header className="fixed left-0 right-0 top-2 z-[10000] px-3 sm:top-4 sm:px-6">
+        <div className="flex h-14 items-center rounded-2xl border border-white/20 bg-white/90 px-3 shadow-[0_8px_25px_rgba(0,0,0,0.06)] backdrop-blur-xl sm:h-16 sm:px-6">
+          <div className="flex flex-1 items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setMobileMenuOpen((current) => !current)}
+              className="flex h-10 w-10 items-center justify-center rounded-xl border border-gray-200 text-gray-600 md:hidden"
+              aria-label="Abrir menú"
+            >
+              {mobileMenuOpen ? <X size={18} /> : <Menu size={18} />}
+            </button>
             <button
               type="button"
               onClick={() => navigate('/dashboard')}
@@ -684,7 +849,7 @@ export default function DashboardLayout() {
             </button>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 sm:gap-3">
 
           {/* Bell notification */}
           <div className="relative" ref={bellRef}>
@@ -705,7 +870,7 @@ export default function DashboardLayout() {
 
             {/* Dropdown */}
             {bellOpen && (
-              <div className="absolute right-0 top-full mt-2 w-96 bg-white rounded-xl shadow-lg border border-gray-200 z-50 overflow-hidden">
+              <div className="absolute right-0 top-full z-50 mt-2 w-[min(24rem,calc(100vw-1rem))] overflow-hidden rounded-xl border border-gray-200 bg-white shadow-lg sm:w-96">
                 <div className="px-4 py-3 border-b border-gray-200 bg-gray-50">
                   <h3 className="text-sm font-bold text-gray-900">Alertas</h3>
                 </div>
@@ -750,7 +915,7 @@ export default function DashboardLayout() {
           </div>
 
           {user?.zones && user.zones.length > 0 && (
-            <span className="rounded-full bg-blue-50 px-2 py-0.5 text-xs font-medium text-blue-700">
+            <span className="hidden rounded-full bg-blue-50 px-2 py-0.5 text-xs font-medium text-blue-700 sm:inline-flex">
               Zona {user.zones.join(', ')}
             </span>
           )}
@@ -766,14 +931,49 @@ export default function DashboardLayout() {
       </header>
 
       {renderSidebar()}
+      {renderMobileDrawer()}
 
-      <div className="flex min-h-0 flex-1">
-        {!collapsed && <div className="fixed bottom-0 left-0 right-0 z-[9998] bg-black/10 backdrop-blur-[2px]" style={{ top: 'var(--app-overlay-top)' }} />}
+      <div className="flex min-h-0 min-w-0 flex-1">
+        {!collapsed && !isMobile && <div className="fixed bottom-0 left-0 right-0 z-[9998] bg-black/10 backdrop-blur-[2px]" style={{ top: 'var(--app-overlay-top)' }} />}
 
-        <main className="ml-[72px] flex flex-1 flex-col overflow-y-auto overflow-x-hidden px-8 pb-8 pt-[104px]">
+        <main className="flex min-w-0 flex-1 flex-col overflow-y-auto overflow-x-hidden px-3 pb-24 pt-[88px] sm:px-6 sm:pt-[96px] md:ml-[72px] md:px-8 md:pb-8 md:pt-[104px]">
           <Outlet context={{ activeAlertCount, visibleAlertNoticeCount: alertNoticeCount, openAlertsPanel }} />
         </main>
       </div>
+
+      {isMobile && user?.role === 'client' && mobileNavItems.length > 0 && (
+        <nav className="fixed bottom-3 left-3 right-3 z-[10000] rounded-2xl border border-white/40 bg-white/95 p-2 shadow-[0_18px_45px_rgba(15,23,42,0.18)] backdrop-blur-xl md:hidden">
+          <div className={[
+            'grid gap-1',
+            mobileNavItems.length >= 4
+              ? 'grid-cols-4'
+              : mobileNavItems.length === 3
+                ? 'grid-cols-3'
+                : mobileNavItems.length === 2
+                  ? 'grid-cols-2'
+                  : 'grid-cols-1',
+          ].join(' ')}>
+            {mobileNavItems.map((entry) => {
+              const Icon = entry.icon;
+              const active = isPathActive(location.pathname, entry.path);
+              return (
+                <NavLink
+                  key={`${entry.key}-bottom`}
+                  to={entry.path}
+                  onClick={handleNavSelection}
+                  className={[
+                    'flex min-w-0 flex-col items-center justify-center gap-1 rounded-xl px-2 py-2 text-center transition',
+                    active ? 'bg-blue-50 text-blue-700' : 'text-gray-500 hover:bg-gray-50 hover:text-gray-900',
+                  ].join(' ')}
+                >
+                  <Icon size={18} />
+                  <span className="truncate text-[11px] font-semibold">{entry.label}</span>
+                </NavLink>
+              );
+            })}
+          </div>
+        </nav>
+      )}
     </div>
   );
 }
