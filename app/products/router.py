@@ -25,6 +25,7 @@ def _enrich(product) -> dict:
     ]
     data["has_ml_mapping"] = bool(direct_ml_mappings)
     data["ml_item_id"] = direct_ml_mappings[0].ml_item_id if direct_ml_mappings else None
+    data["client_name"] = product.client.name if getattr(product, "client", None) else None
     data["location_code"] = product.location.code if product.location else None
     data["preparation_type"] = _get_preparation_type(product)
     return data

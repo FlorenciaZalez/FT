@@ -45,6 +45,7 @@ class ProductUpdate(BaseModel):
 class ProductResponse(BaseModel):
     id: int
     client_id: int
+    client_name: str | None = None
     name: str
     sku: str
     has_ml_mapping: bool = False

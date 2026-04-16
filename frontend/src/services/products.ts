@@ -6,6 +6,7 @@ export type ProductPreparationType = 'simple' | 'especial';
 export interface Product {
   id: number;
   client_id: number;
+  client_name: string | null;
   name: string;
   sku: string;
   has_ml_mapping: boolean;

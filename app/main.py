@@ -5,6 +5,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
+from sqlalchemy import text
 
 import app.models  # noqa: F401
 from app.admin_seed_router import router as admin_seed_router
@@ -33,6 +34,27 @@ app = FastAPI(
 
 API_PREFIX = "/api/v1"
 settings = get_settings()
+
+
+async def _ensure_runtime_schema() -> None:
+    async with engine.begin() as connection:
+        await connection.execute(
+            text(
+                """
+                ALTER TABLE clients
+                ADD COLUMN IF NOT EXISTS variable_storage_enabled BOOLEAN NOT NULL DEFAULT FALSE
+                """
+            )
+        )
+        await connection.execute(
+            text(
+                """
+                UPDATE clients
+                SET variable_storage_enabled = FALSE
+                WHERE variable_storage_enabled IS NULL
+                """
+            )
+        )
 
 
 def _format_validation_error(exc: RequestValidationError) -> str:
@@ -106,3 +128,4 @@ app.include_router(shipping_router, prefix=API_PREFIX)
 async def initialize_database():
     async with engine.begin() as connection:
         await connection.run_sync(lambda sync_connection: Base.metadata.create_all(bind=sync_connection))
+    await _ensure_runtime_schema()

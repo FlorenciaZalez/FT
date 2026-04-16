@@ -30,17 +30,17 @@ class ClientUpdate(BaseModel):
 
 
 class BillingScheduleInfo(BaseModel):
-    day_of_month: int
-    active: bool
+    day_of_month: int | None = None
+    active: bool = False
 
     class Config:
         orm_mode = True
 
 
 class MLAccountInfo(BaseModel):
-    ml_user_id: str
-    ml_nickname: str | None
-    connected_at: datetime
+    ml_user_id: str | None = None
+    ml_nickname: str | None = None
+    connected_at: datetime | None = None
 
     class Config:
         orm_mode = True
@@ -57,7 +57,7 @@ class ClientResponse(BaseModel):
     contact_phone_operational: str | None
     plan: str
     is_active: bool
-    variable_storage_enabled: bool
+    variable_storage_enabled: bool = False
     created_at: datetime
     updated_at: datetime
     ml_account: MLAccountInfo | None = None

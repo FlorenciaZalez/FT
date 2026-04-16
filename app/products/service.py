@@ -82,6 +82,7 @@ def _normalize_product_volume(data: dict, current_product: Product | None = None
 
 def _product_with_relations() -> select:
     return select(Product).options(
+        selectinload(Product.client),
         selectinload(Product.location),
         selectinload(Product.ml_mappings),
     )
