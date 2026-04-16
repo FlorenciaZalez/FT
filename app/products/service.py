@@ -1,3 +1,5 @@
+from decimal import Decimal, ROUND_HALF_UP
+
 from sqlalchemy import select, func
 from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -15,6 +17,7 @@ from app.integrations.mercadolibre.models import MLProductMapping
 
 _ML_REFERENCE_UNSET = object()
 _PREPARATION_TYPE_UNSET = object()
+_DIMENSION_FIELDS = ("width_cm", "height_cm", "depth_cm")
 
 
 def _map_preparation_type_to_weight_category(preparation_type: str) -> ProductWeightCategory:
@@ -47,6 +50,34 @@ def _normalize_product_weight_category(
         data["preparation_type"] = current_preparation_type
     elif current_weight_category is not None:
         data["preparation_type"] = _map_weight_category_to_preparation_type(current_weight_category)
+
+
+def _normalize_product_volume(data: dict, current_product: Product | None = None) -> None:
+    resolved_dimensions: dict[str, float | None] = {}
+    for field in _DIMENSION_FIELDS:
+        raw_value = data.get(field, getattr(current_product, field, None) if current_product else None)
+        if raw_value in ("", None):
+            resolved_dimensions[field] = None
+            if field in data and data[field] == "":
+                data[field] = None
+            continue
+        try:
+            normalized_value = float(raw_value)
+        except (TypeError, ValueError) as exc:
+            raise BadRequestError("Las medidas del producto deben ser numéricas") from exc
+        if normalized_value <= 0:
+            raise BadRequestError("Las medidas del producto deben ser mayores a 0")
+        resolved_dimensions[field] = normalized_value
+        if field in data:
+            data[field] = normalized_value
+
+    if all(resolved_dimensions[field] is not None for field in _DIMENSION_FIELDS):
+        width = Decimal(str(resolved_dimensions["width_cm"]))
+        height = Decimal(str(resolved_dimensions["height_cm"]))
+        depth = Decimal(str(resolved_dimensions["depth_cm"]))
+        data["volume_m3"] = float((width * height * depth / Decimal("1000000")).quantize(Decimal("0.0001"), rounding=ROUND_HALF_UP))
+    elif any(field in data for field in _DIMENSION_FIELDS):
+        data["volume_m3"] = None
 
 
 def _product_with_relations() -> select:
@@ -159,16 +190,26 @@ async def create_product(db: AsyncSession, user: User, data: dict) -> Product:
     check_tenant_access(user, client_id)
     await _validate_location(db, data.get("location_id"))
     _normalize_product_weight_category(data)
+    _normalize_product_volume(data)
 
     # Check unique SKU per client
     existing = await db.execute(
         select(Product).where(Product.client_id == client_id, Product.sku == data["sku"])
     )
-    if existing.scalar_one_or_none():
-        raise ConflictError(f"SKU '{data['sku']}' already exists for this client")
+    existing_product = existing.scalar_one_or_none()
+    if existing_product is not None:
+        if existing_product.is_active:
+            raise ConflictError(f"SKU '{data['sku']}' already exists for this client")
 
-    product = Product(client_id=client_id, **data)
-    db.add(product)
+        for key, value in data.items():
+            if key == "location_id" or value is not None:
+                setattr(existing_product, key, value)
+        existing_product.is_active = True
+        product = existing_product
+    else:
+        product = Product(client_id=client_id, **data)
+        db.add(product)
+
     await db.flush()
     if not product.alta_cobrada:
         from app.billing.service import record_product_created
@@ -187,6 +228,7 @@ async def update_product(db: AsyncSession, product_id: int, user: User, data: di
     product = await get_product(db, product_id, user)
     ml_item_reference = data.pop("ml_item_reference", _ML_REFERENCE_UNSET)
     _normalize_product_weight_category(data, product.weight_category, getattr(product, "preparation_type", None))
+    _normalize_product_volume(data, product)
     if "sku" in data and data["sku"] is not None and data["sku"] != product.sku:
         existing = await db.execute(
             select(Product).where(

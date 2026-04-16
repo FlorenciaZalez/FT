@@ -6,22 +6,44 @@ Este proyecto ya puede correrse localmente para validar cambios antes de deploya
 
 - Backend FastAPI en http://127.0.0.1:8000
 - Frontend Vite en http://127.0.0.1:5173
-- Postgres y Redis con docker-compose
-- Entorno Python virtual existente en /Users/florenciazalez/Desktop/Stock/venv
+- Postgres y Redis con Docker Compose
+- Entorno Python virtual local en ./.venv
+
+## Requisitos del equipo
+
+- Python 3.11 (ver runtime.txt)
+- Node.js + npm
+- Docker Desktop (comando `docker` disponible)
+
+Si falta alguno, las tareas de VS Code no van a poder iniciar.
+
+## Bootstrap recomendado (una vez por máquina)
+
+1. Crear entorno virtual:
+
+   python3.11 -m venv .venv
+
+2. Instalar dependencias backend:
+
+   ./.venv/bin/pip install -r requirements.txt
+
+3. Instalar dependencias frontend:
+
+   cd frontend && npm install
 
 ## Primera puesta en marcha
 
 1. Levantar infraestructura:
 
-   docker-compose up -d db redis
+   docker compose up -d db redis
 
 2. Ejecutar migraciones:
 
-   /Users/florenciazalez/Desktop/Stock/venv/bin/python -m alembic upgrade head
+   ./.venv/bin/python -m alembic upgrade head
 
 3. Levantar backend:
 
-   /Users/florenciazalez/Desktop/Stock/venv/bin/python -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
+   ./.venv/bin/python -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 
 4. Levantar frontend:
 

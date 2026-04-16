@@ -25,6 +25,7 @@ export default function ClientEdit() {
   const [taxId, setTaxId] = useState('');
   const [contactPhone, setContactPhone] = useState('');
   const [plan, setPlan] = useState('basic');
+  const [variableStorageEnabled, setVariableStorageEnabled] = useState(false);
 
   useEffect(() => {
     if (!id) return;
@@ -38,6 +39,7 @@ export default function ClientEdit() {
         setTaxId(data.tax_id ?? '');
         setContactPhone(data.contact_phone ?? '');
         setPlan(data.plan);
+        setVariableStorageEnabled(data.variable_storage_enabled ?? false);
       })
       .catch(() => setError('Error al cargar el cliente'))
       .finally(() => setLoading(false));
@@ -58,6 +60,7 @@ export default function ClientEdit() {
       tax_id: taxId || undefined,
       contact_phone: contactPhone || undefined,
       plan,
+      variable_storage_enabled: variableStorageEnabled,
     };
 
     try {
@@ -188,6 +191,23 @@ export default function ClientEdit() {
                 </option>
               ))}
             </select>
+          </div>
+
+          <div className="rounded-xl border border-blue-100 bg-blue-50 p-4">
+            <label className="flex items-start gap-3 text-sm text-gray-900">
+              <input
+                type="checkbox"
+                checked={variableStorageEnabled}
+                onChange={(e) => setVariableStorageEnabled(e.target.checked)}
+                className="mt-0.5 h-4 w-4 rounded border-gray-200 text-blue-700 focus:ring-blue-500"
+              />
+              <span>
+                <span className="block font-semibold">Almacenamiento variable</span>
+                <span className="block text-xs text-gray-500 mt-1">
+                  Cobra el almacenamiento día a día según el stock medido del cliente.
+                </span>
+              </span>
+            </label>
           </div>
 
           <div className="flex gap-3 pt-2">

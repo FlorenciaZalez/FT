@@ -13,7 +13,7 @@ router = APIRouter(prefix="/clients", tags=["Clients"])
 @router.get("", response_model=list[ClientResponse])
 async def list_clients(
     skip: int = Query(0, ge=0),
-    limit: int = Query(50, ge=1, le=200),
+    limit: int = Query(1000, ge=1, le=5000),
     admin: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ):

@@ -460,7 +460,7 @@ export default function Billing() {
 
       <section className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
         <SummaryCard label={isClient ? 'Acumulado a abonar' : 'Total estimado'} value={formatCurrency(totals.total)} tone="blue" />
-        <SummaryCard label="Storage manual" value={`${formatNumber(totals.totalM3, 3)} m3`} tone="emerald" />
+        <SummaryCard label="Storage calculado" value={`${formatNumber(totals.totalM3, 3)} m3`} tone="emerald" />
         <SummaryCard label="Pedidos / remitos" value={`${formatNumber(totals.totalOrders, 0)} / ${formatNumber(documents.length, 0)}`} tone="amber" />
         <SummaryCard
           label={isClient ? 'Remitos emitidos' : 'Estado del período'}

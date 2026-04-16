@@ -336,6 +336,7 @@ function EditClientModal({
   const [billingDayOfMonth, setBillingDayOfMonth] = useState(
     String(client.billing_schedule?.day_of_month ?? 5),
   );
+  const [variableStorageEnabled, setVariableStorageEnabled] = useState(client.variable_storage_enabled ?? false);
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState('');
 
@@ -354,6 +355,7 @@ function EditClientModal({
         contact_phone_operational: contactPhoneOperational || undefined,
         plan,
         billing_day_of_month: Number(billingDayOfMonth),
+        variable_storage_enabled: variableStorageEnabled,
       });
       onSaved();
     } catch (err: unknown) {
@@ -452,6 +454,22 @@ function EditClientModal({
               ))}
             </select>
           </div>
+          <div className="rounded-xl border border-blue-100 bg-blue-50 p-4">
+            <label className="flex items-start gap-3 text-sm text-gray-900">
+              <input
+                type="checkbox"
+                checked={variableStorageEnabled}
+                onChange={(e) => setVariableStorageEnabled(e.target.checked)}
+                className="mt-0.5 h-4 w-4 rounded border-gray-200 text-blue-700 focus:ring-blue-500"
+              />
+              <span>
+                <span className="block font-semibold">Almacenamiento variable</span>
+                <span className="block text-xs text-gray-500 mt-1">
+                  Calcula los m3 automáticamente según el stock y las medidas de las cajas.
+                </span>
+              </span>
+            </label>
+          </div>
           <div className="flex gap-3 pt-2">
             <button type="button" onClick={onClose}
               className="flex-1 px-4 py-2.5 border border-gray-200 rounded-lg text-sm font-medium text-gray-900 hover:bg-gray-50 transition">
@@ -483,6 +501,7 @@ function CreateClientForm({
   const [contactName, setContactName] = useState('');
   const [contactPhoneOperational, setContactPhoneOperational] = useState('');
   const [billingDayOfMonth, setBillingDayOfMonth] = useState('5');
+  const [variableStorageEnabled, setVariableStorageEnabled] = useState(false);
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState('');
 
@@ -500,6 +519,7 @@ function CreateClientForm({
         contact_name: contactName || undefined,
         contact_phone_operational: contactPhoneOperational || undefined,
         billing_day_of_month: Number(billingDayOfMonth),
+        variable_storage_enabled: variableStorageEnabled,
       });
       onCreated();
     } catch (err: unknown) {
@@ -584,6 +604,22 @@ function CreateClientForm({
               </option>
             ))}
           </select>
+        </div>
+        <div className="rounded-xl border border-blue-100 bg-blue-50 p-4">
+          <label className="flex items-start gap-3 text-sm text-gray-900">
+            <input
+              type="checkbox"
+              checked={variableStorageEnabled}
+              onChange={(e) => setVariableStorageEnabled(e.target.checked)}
+              className="mt-0.5 h-4 w-4 rounded border-gray-200 text-blue-700 focus:ring-blue-500"
+            />
+            <span>
+              <span className="block font-semibold">Almacenamiento variable</span>
+              <span className="block text-xs text-gray-500 mt-1">
+                Activalo para cobrar almacenamiento según el stock real y los m3 cargados por caja.
+              </span>
+            </span>
+          </label>
         </div>
         <div className="flex gap-2 pt-2">
           <button type="button" onClick={onCancel}

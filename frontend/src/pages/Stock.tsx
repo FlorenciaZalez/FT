@@ -977,8 +977,11 @@ function BulkStockEntryPanel({
   const [focusRowId, setFocusRowId] = useState<number | null>(null);
   const searchInputRefs = useRef<Record<number, HTMLInputElement | null>>({});
 
-  const activeProducts = useMemo(
-    () => products.filter((product) => product.is_active),
+  const selectableProducts = useMemo(
+    () => [...products].sort((left, right) => {
+      if (left.is_active !== right.is_active) return left.is_active ? -1 : 1;
+      return left.name.localeCompare(right.name, 'es');
+    }),
     [products],
   );
   const clientNameById = useMemo(
@@ -987,14 +990,14 @@ function BulkStockEntryPanel({
   );
   const productMatchesBySku = useMemo(() => {
     const map = new Map<string, Product[]>();
-    for (const product of activeProducts) {
+    for (const product of selectableProducts) {
       const key = normalizeSku(product.sku);
       const current = map.get(key) ?? [];
       current.push(product);
       map.set(key, current);
     }
     return map;
-  }, [activeProducts]);
+  }, [selectableProducts]);
 
   useEffect(() => {
     const timeout = window.setTimeout(() => {
@@ -1022,7 +1025,7 @@ function BulkStockEntryPanel({
       const query = normalizeSku(debouncedQueries[row.id] ?? '');
       if (!query) return [row.id, []];
 
-      const matches = activeProducts
+      const matches = selectableProducts
         .filter((product) => {
           const sku = normalizeSku(product.sku);
           const name = product.name.trim().toLowerCase();
@@ -1039,7 +1042,7 @@ function BulkStockEntryPanel({
     });
 
     return new Map<number, Product[]>(entries);
-  }, [activeProducts, debouncedQueries, rows]);
+  }, [selectableProducts, debouncedQueries, rows]);
 
   const buildRowFromProduct = (row: BulkStockRow, product: Product): BulkStockRow => ({
     ...row,
@@ -1454,7 +1457,7 @@ function BulkStockEntryPanel({
                                     : 'bg-white text-gray-900 hover:bg-gray-50'
                                 }`}
                               >
-                                <div className="font-medium text-gray-900">{product.name} (SKU: {product.sku})</div>
+                                <div className="font-medium text-gray-900">{product.name} (SKU: {product.sku}){!product.is_active ? ' · Inactivo' : ''}</div>
                                 <div className="text-xs text-gray-500 mt-0.5">{clientNameById.get(product.client_id) ?? '—'}</div>
                               </button>
                             ))}
@@ -1598,25 +1601,28 @@ function StockMoveModal({
     : 'bg-red-600 hover:opacity-90';
   const reasonOptions = isIn ? REASON_OPTIONS_IN : REASON_OPTIONS_OUT;
 
-  const activeProducts = useMemo(
-    () => products.filter((product) => product.is_active),
+  const selectableProducts = useMemo(
+    () => [...products].sort((left, right) => {
+      if (left.is_active !== right.is_active) return left.is_active ? -1 : 1;
+      return left.name.localeCompare(right.name, 'es');
+    }),
     [products],
   );
   const filteredProducts = useMemo(() => {
     const filtered = selectedClientId
-      ? activeProducts.filter((product) => product.client_id === parseInt(selectedClientId))
-      : activeProducts;
+      ? selectableProducts.filter((product) => product.client_id === parseInt(selectedClientId))
+      : selectableProducts;
     return [...filtered].sort((left, right) => left.name.localeCompare(right.name, 'es'));
-  }, [activeProducts, selectedClientId]);
-  const selectedProduct = productId ? activeProducts.find((product) => product.id === parseInt(productId)) ?? null : null;
+  }, [selectableProducts, selectedClientId]);
+  const selectedProduct = productId ? selectableProducts.find((product) => product.id === parseInt(productId)) ?? null : null;
   const stockEntry = selectedProduct ? stockMap.get(selectedProduct.id) : null;
   const availableStock = stockEntry?.quantity_available ?? 0;
   const selectedClientName = selectedProduct ? (clientMap.get(selectedProduct.client_id) ?? '—') : null;
   const exactSkuMatches = useMemo(() => {
     const normalized = normalizeSku(skuQuery);
     if (!normalized) return [] as Product[];
-    return activeProducts.filter((product) => normalizeSku(product.sku) === normalized);
-  }, [activeProducts, skuQuery]);
+    return selectableProducts.filter((product) => normalizeSku(product.sku) === normalized);
+  }, [selectableProducts, skuQuery]);
   const autoMatchedBySku = exactSkuMatches.length === 1;
   const duplicatedSku = exactSkuMatches.length > 1;
   const skuNotFound = normalizeSku(skuQuery).length > 0 && exactSkuMatches.length === 0;
@@ -1661,7 +1667,7 @@ function StockMoveModal({
     setProductId(value);
     setFormError('');
     const nextProduct = value
-      ? activeProducts.find((product) => product.id === parseInt(value)) ?? null
+      ? selectableProducts.find((product) => product.id === parseInt(value)) ?? null
       : null;
     if (nextProduct) {
       setSelectedClientId(nextProduct.client_id.toString());
@@ -1678,7 +1684,7 @@ function StockMoveModal({
       return;
     }
     const normalized = normalizeSku(value);
-    const matches = activeProducts.filter((product) => normalizeSku(product.sku) === normalized);
+    const matches = selectableProducts.filter((product) => normalizeSku(product.sku) === normalized);
     if (matches.length !== 1) {
       setProductId('');
     }
@@ -1818,12 +1824,12 @@ function StockMoveModal({
                 <option value="">Seleccionar producto...</option>
                 {filteredProducts.map((p) => (
                   <option key={p.id} value={p.id}>
-                    {p.name} (SKU: {p.sku})
+                    {p.name} (SKU: {p.sku}){!p.is_active ? ' · Inactivo' : ''}
                   </option>
                 ))}
               </select>
               {selectedClientId && filteredProducts.length === 0 && (
-                <p className="text-xs text-yellow-800 mt-1">No hay productos activos para el cliente seleccionado.</p>
+                <p className="text-xs text-yellow-800 mt-1">No hay productos cargados para el cliente seleccionado.</p>
               )}
               {autoMatchedBySku && (
                 <p className="text-xs text-green-700 mt-1">Producto autoseleccionado por SKU.</p>
@@ -1852,6 +1858,9 @@ function StockMoveModal({
           {/* Contexto del producto seleccionado */}
           {selectedProduct && stockEntry && (
             <div className="bg-gray-50 rounded-lg p-4 space-y-2 text-sm">
+              {!selectedProduct.is_active && (
+                <p className="text-xs text-yellow-800">Este producto está inactivo, pero igual podés moverle stock.</p>
+              )}
               <div className="flex flex-wrap gap-x-6 gap-y-2">
                 <div>
                   <span className="text-gray-500">Total:</span>{' '}

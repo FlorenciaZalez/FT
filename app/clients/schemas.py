@@ -12,6 +12,7 @@ class ClientCreate(BaseModel):
     contact_phone_operational: str | None = None
     plan: str = "basic"
     billing_day_of_month: int | None = Field(default=None, ge=1, le=31)
+    variable_storage_enabled: bool = False
 
 
 class ClientUpdate(BaseModel):
@@ -25,6 +26,7 @@ class ClientUpdate(BaseModel):
     plan: str | None = None
     is_active: bool | None = None
     billing_day_of_month: int | None = Field(default=None, ge=1, le=31)
+    variable_storage_enabled: bool | None = None
 
 
 class BillingScheduleInfo(BaseModel):
@@ -55,6 +57,7 @@ class ClientResponse(BaseModel):
     contact_phone_operational: str | None
     plan: str
     is_active: bool
+    variable_storage_enabled: bool
     created_at: datetime
     updated_at: datetime
     ml_account: MLAccountInfo | None = None

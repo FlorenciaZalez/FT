@@ -33,7 +33,7 @@ def _enrich(product) -> dict:
 @router.get("", response_model=list[ProductResponse])
 async def list_products(
     skip: int = Query(0, ge=0),
-    limit: int = Query(50, ge=1, le=200),
+    limit: int = Query(1000, ge=1, le=5000),
     user: User = Depends(require_any),
     db: AsyncSession = Depends(get_db),
 ):

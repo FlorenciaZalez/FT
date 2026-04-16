@@ -37,6 +37,14 @@ function parseMercadoLibreItemReference(rawValue: string): { normalized: string 
   return { normalized: `MLA${match[2]}`, error: null };
 }
 
+function calculateVolumePreview(widthCm: string, heightCm: string, depthCm: string): string {
+  const values = [widthCm, heightCm, depthCm].map((value) => Number(value));
+  if (values.some((value) => !Number.isFinite(value) || value <= 0)) {
+    return '—';
+  }
+  return `${((values[0] * values[1] * values[2]) / 1000000).toFixed(4)} m3`;
+}
+
 const LOW_STOCK_THRESHOLD = 5;
 const PREPARATION_TYPE_OPTIONS: Array<{ value: ProductPreparationType; label: string }> = [
   { value: 'simple', label: 'Preparación simple' },
@@ -226,6 +234,9 @@ export default function Products() {
                 >
                   <td className="px-6 py-4">
                     <div className="font-semibold text-gray-900">{p.name}</div>
+                    <div className="mt-1 text-[11px] text-gray-500">
+                      {p.volume_m3 !== null ? `${p.volume_m3.toFixed(4)} m3 por unidad` : 'Sin medidas cargadas'}
+                    </div>
                     {!p.is_active && (
                       <div className="mt-1 text-[11px] text-gray-500 uppercase tracking-wide">Inactivo</div>
                     )}
@@ -416,8 +427,8 @@ function ConfirmModal({
       : 'bg-green-600 hover:opacity-90 text-white';
 
   return (
-    <div className="app-modal-overlay bg-text-blue-700/40">
-      <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6 max-h-[calc(100vh-2rem)] overflow-y-auto">
+    <div className="app-modal-overlay">
+      <div className="app-modal-panel max-w-sm p-6">
         <h3 className="text-lg font-bold text-gray-900 mb-2">{title}</h3>
         <p className="text-sm text-gray-500 mb-5">{message}</p>
 
@@ -470,6 +481,9 @@ function EditProductModal({
   const [mlItemReference, setMlItemReference] = useState(product.ml_item_id ?? '');
   const [preparationType, setPreparationType] = useState<ProductPreparationType>(product.preparation_type ?? 'simple');
   const [locationId, setLocationId] = useState<string>(product.location_id?.toString() ?? '');
+  const [widthCm, setWidthCm] = useState(product.width_cm?.toString() ?? '');
+  const [heightCm, setHeightCm] = useState(product.height_cm?.toString() ?? '');
+  const [depthCm, setDepthCm] = useState(product.depth_cm?.toString() ?? '');
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState('');
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -478,6 +492,10 @@ function EditProductModal({
   const mlItemDetection = useMemo(
     () => parseMercadoLibreItemReference(mlItemReference),
     [mlItemReference],
+  );
+  const volumePreview = useMemo(
+    () => calculateVolumePreview(widthCm, heightCm, depthCm),
+    [widthCm, heightCm, depthCm],
   );
 
   const handleSubmit = async (e: FormEvent) => {
@@ -494,6 +512,9 @@ function EditProductModal({
         sku,
         ml_item_reference: mlItemDetection.normalized,
         preparation_type: preparationType,
+        width_cm: widthCm ? Number(widthCm) : null,
+        height_cm: heightCm ? Number(heightCm) : null,
+        depth_cm: depthCm ? Number(depthCm) : null,
         location_id: locationId ? parseInt(locationId) : null,
       });
       onSaved();
@@ -524,8 +545,8 @@ function EditProductModal({
   };
 
   return (
-    <div className="app-modal-overlay bg-text-blue-700/40">
-      <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6 max-h-[calc(100vh-2rem)] overflow-y-auto">
+    <div className="app-modal-overlay">
+      <div className="app-modal-panel max-w-md p-6">
         <div className="flex items-center justify-between mb-5">
           <h2 className="text-lg font-bold text-gray-900">Editar producto</h2>
           <button onClick={onClose} className="text-gray-500 hover:text-gray-500 text-xl">&times;</button>
@@ -601,6 +622,43 @@ function EditProductModal({
             </select>
           </div>
 
+          <div className="rounded-xl border border-blue-100 bg-blue-50 p-4 space-y-3">
+            <div>
+              <h3 className="text-sm font-semibold text-gray-900">Medidas de la caja</h3>
+              <p className="text-xs text-gray-500 mt-1">Cargá ancho, alto y profundidad en centímetros para calcular los m3 automáticamente.</p>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                value={widthCm}
+                onChange={(e) => setWidthCm(e.target.value)}
+                className="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                placeholder="Ancho cm"
+              />
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                value={heightCm}
+                onChange={(e) => setHeightCm(e.target.value)}
+                className="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                placeholder="Alto cm"
+              />
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                value={depthCm}
+                onChange={(e) => setDepthCm(e.target.value)}
+                className="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                placeholder="Profundidad cm"
+              />
+            </div>
+            <p className="text-xs font-medium text-blue-700">Volumen estimado: {volumePreview}</p>
+          </div>
+
           <div className="flex gap-3 pt-2">
             <button
               type="button"
@@ -633,8 +691,8 @@ function EditProductModal({
 
       {/* Confirm delete sub-modal */}
       {confirmDelete && (
-        <div className="app-modal-overlay bg-text-blue-700/40 z-[10001]">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6 max-h-[calc(100vh-2rem)] overflow-y-auto">
+        <div className="app-modal-overlay z-[10030]">
+          <div className="app-modal-panel max-w-sm p-6">
             <h3 className="text-lg font-bold text-gray-900 mb-2">Eliminar producto</h3>
             <p className="text-sm text-gray-500 mb-5">
               ¿Seguro que querés eliminar este producto? Esta acción no se puede deshacer.
@@ -684,6 +742,9 @@ function CreateProductForm({
   const [sku, setSku] = useState('');
   const [preparationType, setPreparationType] = useState<ProductPreparationType>('simple');
   const [locationId, setLocationId] = useState('');
+  const [widthCm, setWidthCm] = useState('');
+  const [heightCm, setHeightCm] = useState('');
+  const [depthCm, setDepthCm] = useState('');
   const [mlItemReference, setMlItemReference] = useState('');
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState('');
@@ -696,6 +757,10 @@ function CreateProductForm({
   const mlItemDetection = useMemo(
     () => parseMercadoLibreItemReference(mlItemReference),
     [mlItemReference],
+  );
+  const volumePreview = useMemo(
+    () => calculateVolumePreview(widthCm, heightCm, depthCm),
+    [widthCm, heightCm, depthCm],
   );
 
   useEffect(() => {
@@ -737,12 +802,18 @@ function CreateProductForm({
         client_id: parseInt(activeClientId, 10),
         ml_item_reference: mlItemDetection.normalized,
         preparation_type: preparationType,
+        width_cm: widthCm ? Number(widthCm) : null,
+        height_cm: heightCm ? Number(heightCm) : null,
+        depth_cm: depthCm ? Number(depthCm) : null,
         location_id: locationId ? parseInt(locationId) : null,
       });
       setName('');
       setSku('');
       setPreparationType('simple');
       setLocationId('');
+      setWidthCm('');
+      setHeightCm('');
+      setDepthCm('');
       setMlItemReference('');
       if (printOnCreate) {
         try {
@@ -777,6 +848,9 @@ function CreateProductForm({
     setSku('');
     setPreparationType('simple');
     setLocationId('');
+    setWidthCm('');
+    setHeightCm('');
+    setDepthCm('');
     setMlItemReference('');
     setFormError('');
     setFeedback(null);
@@ -895,6 +969,42 @@ function CreateProductForm({
             ))}
           </select>
         </div>
+        <div className="sm:col-span-2 rounded-xl border border-blue-100 bg-blue-50 p-4 space-y-3">
+          <div>
+            <h3 className="text-sm font-semibold text-gray-900">Medidas de la caja</h3>
+            <p className="text-xs text-gray-500 mt-1">Estas medidas permiten calcular el almacenamiento variable automáticamente.</p>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <input
+              type="number"
+              min="0"
+              step="0.01"
+              value={widthCm}
+              onChange={(e) => setWidthCm(e.target.value)}
+              className="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+              placeholder="Ancho cm"
+            />
+            <input
+              type="number"
+              min="0"
+              step="0.01"
+              value={heightCm}
+              onChange={(e) => setHeightCm(e.target.value)}
+              className="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+              placeholder="Alto cm"
+            />
+            <input
+              type="number"
+              min="0"
+              step="0.01"
+              value={depthCm}
+              onChange={(e) => setDepthCm(e.target.value)}
+              className="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+              placeholder="Profundidad cm"
+            />
+          </div>
+          <p className="text-xs font-medium text-blue-700">Volumen estimado: {volumePreview}</p>
+        </div>
         <div className="sm:col-span-2">
           <label className="block text-sm font-medium text-gray-900 mb-1">Link o ID de MercadoLibre</label>
           <input
@@ -999,8 +1109,8 @@ function LabelPrintModal({
   };
 
   return (
-    <div className="app-modal-overlay bg-text-blue-700/40">
-      <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6 max-h-[calc(100vh-2rem)] overflow-y-auto">
+    <div className="app-modal-overlay">
+      <div className="app-modal-panel max-w-md p-6">
         <div className="flex items-center justify-between mb-5">
           <div>
             <h2 className="text-lg font-bold text-gray-900">Imprimir etiqueta</h2>

@@ -22,6 +22,7 @@ export interface Client {
   contact_phone_operational: string | null;
   plan: string;
   is_active: boolean;
+  variable_storage_enabled: boolean;
   created_at: string;
   updated_at: string;
   ml_account: MLAccountInfo | null;
@@ -38,6 +39,7 @@ export interface ClientCreatePayload {
   contact_phone_operational?: string;
   plan?: string;
   billing_day_of_month?: number;
+  variable_storage_enabled?: boolean;
 }
 
 export interface ClientUpdatePayload {
@@ -51,10 +53,11 @@ export interface ClientUpdatePayload {
   plan?: string;
   is_active?: boolean;
   billing_day_of_month?: number;
+  variable_storage_enabled?: boolean;
 }
 
-export async function fetchClients(): Promise<Client[]> {
-  const { data } = await api.get<Client[]>('/clients');
+export async function fetchClients(limit = 1000): Promise<Client[]> {
+  const { data } = await api.get<Client[]>('/clients', { params: { limit } });
   return data;
 }
 

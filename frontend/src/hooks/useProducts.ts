@@ -33,7 +33,10 @@ export function useProducts() {
 
   const add = async (payload: ProductCreatePayload) => {
     const created = await createProduct(payload);
-    setProducts((prev) => [...prev, created]);
+    setProducts((prev) => {
+      const exists = prev.some((product) => product.id === created.id);
+      return exists ? prev.map((product) => (product.id === created.id ? created : product)) : [...prev, created];
+    });
     return created;
   };
 

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from calendar import monthrange
 from dataclasses import dataclass
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal, ROUND_HALF_UP
 
 from sqlalchemy import Numeric, cast, func, select
@@ -28,12 +28,20 @@ from app.clients.models import Client
 from app.common.exceptions import BadRequestError, NotFoundError
 from app.common.permissions import check_tenant_access
 from app.orders.models import Order, OrderItem, OrderStatus
+from app.products.models import Product
+from app.stock.models import Stock
+from app.stock.movement_models import MovementType, StockMovement
 
 TWOPLACES = Decimal("0.01")
 THREEPLACES = Decimal("0.001")
 FOURPLACES = Decimal("0.0001")
 DEFAULT_BILLING_DAY = 5
 ALERT_DUE_SOON_DAYS = 2
+VARIABLE_STORAGE_MOVEMENT_TYPES = (
+    MovementType.inbound,
+    MovementType.outbound,
+    MovementType.adjustment,
+)
 
 
 @dataclass
@@ -212,6 +220,160 @@ def _discount_multiplier(discount_pct: Decimal | float | int | None) -> Decimal:
 def _apply_discount(amount: Decimal | float | int | None, discount_pct: Decimal | float | int | None, places: Decimal = TWOPLACES) -> Decimal:
     base_amount = _to_decimal(amount, places)
     return _to_decimal(base_amount * _discount_multiplier(discount_pct), places)
+
+
+def _total_volume_for_quantities(
+    quantities_by_product: dict[int, int],
+    product_volumes: dict[int, Decimal],
+) -> Decimal:
+    total = Decimal("0.000")
+    for product_id, quantity in quantities_by_product.items():
+        normalized_quantity = max(int(quantity or 0), 0)
+        if normalized_quantity <= 0:
+            continue
+        total += Decimal(normalized_quantity) * _to_decimal(product_volumes.get(product_id), FOURPLACES)
+    return total.quantize(THREEPLACES, rounding=ROUND_HALF_UP)
+
+
+def _calculate_storage_amount_from_daily_volumes(
+    daily_volumes: list[Decimal | float | int | None],
+    storage_rate: Decimal | float | int | None,
+    days_in_month: int,
+) -> Decimal:
+    if days_in_month <= 0 or not daily_volumes:
+        return Decimal("0.00")
+
+    daily_rate = Decimal(str(storage_rate or 0)) / Decimal(str(days_in_month))
+    total = Decimal("0.00")
+    for volume in daily_volumes:
+        total += _to_decimal(volume, THREEPLACES) * daily_rate
+    return total.quantize(TWOPLACES, rounding=ROUND_HALF_UP)
+
+
+def _build_daily_storage_volumes(
+    current_quantities: dict[int, int],
+    movement_rows: list[dict],
+    product_volumes: dict[int, Decimal],
+    start_day: date,
+    end_day: date,
+) -> list[Decimal]:
+    if end_day < start_day:
+        return []
+
+    state = {product_id: max(int(quantity or 0), 0) for product_id, quantity in current_quantities.items()}
+    ordered_movements = sorted(movement_rows, key=lambda item: item["created_at"], reverse=True)
+    index = 0
+
+    while index < len(ordered_movements):
+        created_at = ordered_movements[index]["created_at"]
+        movement_day = created_at.astimezone(timezone.utc).date() if created_at.tzinfo else created_at.date()
+        if movement_day <= end_day:
+            break
+        product_id = ordered_movements[index]["product_id"]
+        state[product_id] = max(state.get(product_id, 0) - int(ordered_movements[index]["quantity"] or 0), 0)
+        index += 1
+
+    daily_volumes: list[Decimal] = []
+    current_day = end_day
+    while current_day >= start_day:
+        daily_volumes.append(_total_volume_for_quantities(state, product_volumes))
+        while index < len(ordered_movements):
+            created_at = ordered_movements[index]["created_at"]
+            movement_day = created_at.astimezone(timezone.utc).date() if created_at.tzinfo else created_at.date()
+            if movement_day != current_day:
+                break
+            product_id = ordered_movements[index]["product_id"]
+            state[product_id] = max(state.get(product_id, 0) - int(ordered_movements[index]["quantity"] or 0), 0)
+            index += 1
+        current_day -= timedelta(days=1)
+
+    daily_volumes.reverse()
+    return daily_volumes
+
+
+async def _calculate_variable_storage_metrics(
+    db: AsyncSession,
+    client_id: int,
+    period: str,
+    storage_rate: Decimal,
+) -> tuple[Decimal, Decimal, bool]:
+    start, end = _parse_period(period)
+    now = datetime.now(timezone.utc)
+    effective_end = min(end, now)
+    if effective_end <= start:
+        return Decimal("0.000"), Decimal("0.00"), False
+
+    quantity_rows = await db.execute(
+        select(
+            Stock.product_id,
+            func.coalesce(func.sum(Stock.quantity_total), 0),
+            Product.volume_m3,
+        )
+        .join(Product, Product.id == Stock.product_id)
+        .where(Stock.client_id == client_id)
+        .group_by(Stock.product_id, Product.volume_m3)
+    )
+
+    current_quantities: dict[int, int] = {}
+    product_volumes: dict[int, Decimal] = {}
+    missing_dimensions = False
+
+    for product_id, quantity_total, volume_m3 in quantity_rows.all():
+        resolved_quantity = int(quantity_total or 0)
+        resolved_volume = _to_decimal(volume_m3, FOURPLACES) if volume_m3 is not None else Decimal("0.0000")
+        current_quantities[product_id] = resolved_quantity
+        product_volumes[product_id] = resolved_volume
+        if resolved_quantity > 0 and resolved_volume <= Decimal("0.0000"):
+            missing_dimensions = True
+
+    movement_result = await db.execute(
+        select(
+            StockMovement.product_id,
+            StockMovement.quantity,
+            StockMovement.created_at,
+            Product.volume_m3,
+        )
+        .join(Product, Product.id == StockMovement.product_id)
+        .where(
+            StockMovement.client_id == client_id,
+            StockMovement.movement_type.in_(VARIABLE_STORAGE_MOVEMENT_TYPES),
+            StockMovement.created_at >= start,
+            StockMovement.created_at < now,
+        )
+        .order_by(StockMovement.created_at.desc(), StockMovement.id.desc())
+    )
+
+    movement_rows: list[dict] = []
+    for product_id, quantity, created_at, volume_m3 in movement_result.all():
+        resolved_volume = _to_decimal(volume_m3, FOURPLACES) if volume_m3 is not None else Decimal("0.0000")
+        current_quantities.setdefault(product_id, 0)
+        product_volumes[product_id] = resolved_volume
+        if int(quantity or 0) != 0 and resolved_volume <= Decimal("0.0000"):
+            missing_dimensions = True
+        movement_rows.append(
+            {
+                "product_id": product_id,
+                "quantity": int(quantity or 0),
+                "created_at": created_at,
+            }
+        )
+
+    current_total_m3 = _total_volume_for_quantities(current_quantities, product_volumes)
+    if missing_dimensions:
+        return current_total_m3, Decimal("0.00"), True
+
+    last_day_of_month = (end - timedelta(days=1)).date()
+    billable_end_day = min(effective_end.date(), last_day_of_month)
+    daily_volumes = _build_daily_storage_volumes(
+        current_quantities,
+        movement_rows,
+        product_volumes,
+        start.date(),
+        billable_end_day,
+    )
+    days_in_month = monthrange(start.year, start.month)[1]
+    storage_amount = _calculate_storage_amount_from_daily_volumes(daily_volumes, storage_rate, days_in_month)
+    return current_total_m3, storage_amount, False
 
 
 def _serialize_product_creation_record(record: ProductCreationRecord, client_name: str | None = None) -> dict:
@@ -668,15 +830,25 @@ async def _build_preview_rows(
         shipping_base = _to_decimal(global_rates.shipping_base)
         shipping_discount_pct = _to_decimal(override.shipping_discount_pct if override and override.shipping_discount_pct is not None else 0)
         shipping_multiplier = _discount_multiplier(shipping_discount_pct)
-        storage_record = storage_map.get(client.id)
-        missing_storage = storage_record is None
-        total_m3 = _to_decimal(storage_record.storage_m3 if storage_record else 0, THREEPLACES)
+
+        if client.variable_storage_enabled:
+            total_m3, storage_amount, missing_storage = await _calculate_variable_storage_metrics(
+                db,
+                client.id,
+                period,
+                storage_rate,
+            )
+        else:
+            storage_record = storage_map.get(client.id)
+            missing_storage = storage_record is None
+            total_m3 = _to_decimal(storage_record.storage_m3 if storage_record else 0, THREEPLACES)
+            storage_amount = _to_decimal(total_m3 * storage_rate)
+
         order_metrics = order_metrics_by_client.get(client.id, {"total_orders": 0, "shipping_source_amount": Decimal("0.00")})
         total_orders = int(order_metrics["total_orders"])
         shipping_source_amount = _to_decimal(order_metrics["shipping_source_amount"])
         if shipping_source_amount <= Decimal("0.00") and total_orders > 0:
             shipping_source_amount = _to_decimal(Decimal(total_orders) * shipping_base)
-        storage_amount = _to_decimal(total_m3 * storage_rate)
 
         preparation_base_rate = _to_decimal(global_rates.preparation_base_fee)
         preparation_discount_pct = Decimal("0.00")
@@ -797,7 +969,7 @@ async def generate_charges(db: AsyncSession, period: str, due_date: date | None,
     missing_storage_clients = [preview.client.name for preview in previews if preview.missing_storage]
     if missing_storage_clients:
         raise BadRequestError(
-            "Falta cargar ocupación mensual para: " + ", ".join(missing_storage_clients)
+            "Faltan datos de almacenamiento para: " + ", ".join(missing_storage_clients)
         )
 
     resolved_due_date = due_date or _default_due_date(period)
@@ -923,7 +1095,7 @@ async def generate_billing_documents(
     missing_storage_clients = [preview.client.name for preview in previews if preview.missing_storage]
     if missing_storage_clients:
         raise BadRequestError(
-            "Falta cargar ocupación mensual para: " + ", ".join(missing_storage_clients)
+            "Faltan datos de almacenamiento para: " + ", ".join(missing_storage_clients)
         )
 
     client_ids = [preview.client.id for preview in previews]

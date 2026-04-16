@@ -15,6 +15,9 @@ export interface Product {
   weight_kg: number | null;
   preparation_type: ProductPreparationType;
   weight_category: ProductWeightCategory;
+  width_cm: number | null;
+  height_cm: number | null;
+  depth_cm: number | null;
   volume_m3: number | null;
   location_id: number | null;
   location_code: string | null;
@@ -29,6 +32,9 @@ export interface ProductCreatePayload {
   client_id: number;
   ml_item_reference?: string | null;
   preparation_type?: ProductPreparationType;
+  width_cm?: number | null;
+  height_cm?: number | null;
+  depth_cm?: number | null;
   volume_m3?: number | null;
   location_id?: number | null;
 }
@@ -38,13 +44,16 @@ export interface ProductUpdatePayload {
   sku?: string;
   ml_item_reference?: string | null;
   preparation_type?: ProductPreparationType;
+  width_cm?: number | null;
+  height_cm?: number | null;
+  depth_cm?: number | null;
   volume_m3?: number | null;
   location_id?: number | null;
   is_active?: boolean;
 }
 
-export async function fetchProducts(): Promise<Product[]> {
-  const { data } = await api.get<Product[]>('/products');
+export async function fetchProducts(limit = 1000): Promise<Product[]> {
+  const { data } = await api.get<Product[]>('/products', { params: { limit } });
   return data;
 }
 
