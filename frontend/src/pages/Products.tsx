@@ -35,7 +35,7 @@ function parseMercadoLibreItemReference(rawValue: string): { normalized: string[
   const seen = new Set<string>();
 
   for (const part of parts) {
-    const match = part.toUpperCase().match(/(MLA)[-_\s]?(\d+)/);
+    const match = part.toUpperCase().match(/(ML[A-Z])[-_\s]?(\d+)/);
     if (!match) {
       return {
         normalized: [],
@@ -43,7 +43,7 @@ function parseMercadoLibreItemReference(rawValue: string): { normalized: string[
       };
     }
 
-    const itemId = `MLA${match[2]}`;
+    const itemId = `${match[1]}${match[2]}`;
     if (!seen.has(itemId)) {
       seen.add(itemId);
       normalized.push(itemId);

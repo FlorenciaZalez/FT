@@ -18,7 +18,7 @@ ML_AUTH_URL = "https://auth.mercadolibre.com/authorization"
 ML_TOKEN_URL = "https://api.mercadolibre.com/oauth/token"
 ML_USER_URL = "https://api.mercadolibre.com/users/me"
 ML_API_BASE_URL = "https://api.mercadolibre.com"
-ML_ITEM_ID_PATTERN = re.compile(r"(MLA)[-_\s]?(\d+)", re.IGNORECASE)
+ML_ITEM_ID_PATTERN = re.compile(r"(ML[A-Z])[-_\s]?(\d+)", re.IGNORECASE)
 ML_ORDER_RESOURCE_PATTERN = re.compile(r"/orders/(\d+)")
 
 _ML_PLACEHOLDER_VALUES = {
@@ -40,7 +40,7 @@ def normalize_ml_item_id(raw_value: str | None) -> str | None:
     if match is None:
         raise BadRequestError("El item de MercadoLibre debe tener formato MLA123456789 o una URL válida")
 
-    return f"MLA{match.group(2)}"
+    return f"{match.group(1).upper()}{match.group(2)}"
 
 
 def normalize_ml_item_ids(raw_value: str | None) -> list[str]:
@@ -54,7 +54,7 @@ def normalize_ml_item_ids(raw_value: str | None) -> list[str]:
     normalized: list[str] = []
     seen: set[str] = set()
     for match in ML_ITEM_ID_PATTERN.finditer(value):
-        item_id = f"MLA{match.group(2)}"
+        item_id = f"{match.group(1).upper()}{match.group(2)}"
         if item_id not in seen:
             seen.add(item_id)
             normalized.append(item_id)
