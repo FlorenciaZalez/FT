@@ -289,12 +289,12 @@ function buildPrintDocument(labels: LabelProduct[]): string {
       }
 
       .label__sku {
-        width: 36mm;
+          width: 42mm;
         text-align: center;
         font-family: "Courier New", monospace;
-        font-size: 2.7mm;
+          font-size: 4mm;
         font-weight: 700;
-        line-height: 1;
+          line-height: 0.95;
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
