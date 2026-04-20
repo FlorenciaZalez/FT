@@ -43,6 +43,28 @@ def normalize_ml_item_id(raw_value: str | None) -> str | None:
     return f"MLA{match.group(2)}"
 
 
+def normalize_ml_item_ids(raw_value: str | None) -> list[str]:
+    if raw_value is None:
+        return []
+
+    value = raw_value.strip().upper()
+    if not value:
+        return []
+
+    normalized: list[str] = []
+    seen: set[str] = set()
+    for match in ML_ITEM_ID_PATTERN.finditer(value):
+        item_id = f"MLA{match.group(2)}"
+        if item_id not in seen:
+            seen.add(item_id)
+            normalized.append(item_id)
+
+    if not normalized:
+        raise BadRequestError("El item de MercadoLibre debe tener formato MLA123456789 o una URL válida")
+
+    return normalized
+
+
 # ─── OAuth helpers ────────────────────────────────────────────────
 
 def _validate_oauth_settings(require_secret: bool) -> None:

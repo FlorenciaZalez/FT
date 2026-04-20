@@ -11,6 +11,7 @@ export interface Product {
   sku: string;
   has_ml_mapping: boolean;
   ml_item_id: string | null;
+  ml_item_ids: string[];
   barcode: string | null;
   description: string | null;
   weight_kg: number | null;

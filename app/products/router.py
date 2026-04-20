@@ -23,8 +23,10 @@ def _enrich(product) -> dict:
     direct_ml_mappings = [
         mapping for mapping in product.ml_mappings if mapping.is_active and mapping.ml_variation_id is None
     ]
-    data["has_ml_mapping"] = bool(direct_ml_mappings)
-    data["ml_item_id"] = direct_ml_mappings[0].ml_item_id if direct_ml_mappings else None
+    ml_item_ids = sorted({mapping.ml_item_id for mapping in direct_ml_mappings})
+    data["has_ml_mapping"] = bool(ml_item_ids)
+    data["ml_item_id"] = ml_item_ids[0] if ml_item_ids else None
+    data["ml_item_ids"] = ml_item_ids
     data["client_name"] = product.client.name if getattr(product, "client", None) else None
     data["location_code"] = product.location.code if product.location else None
     data["preparation_type"] = _get_preparation_type(product)

@@ -20,21 +20,37 @@ function formatLastMovement(date: string | undefined): string {
   return `Hace ${diffDays} días`;
 }
 
-function parseMercadoLibreItemReference(rawValue: string): { normalized: string | null; error: string | null } {
+function parseMercadoLibreItemReference(rawValue: string): { normalized: string[]; error: string | null } {
   const trimmedValue = rawValue.trim();
   if (!trimmedValue) {
-    return { normalized: null, error: null };
+    return { normalized: [], error: null };
   }
 
-  const match = trimmedValue.toUpperCase().match(/(MLA)[-_\s]?(\d+)/);
-  if (!match) {
-    return {
-      normalized: null,
-      error: 'Ingresá un item_id válido de MercadoLibre o una URL válida.',
-    };
+  const parts = trimmedValue
+    .split(/[\n,;]+/)
+    .map((value) => value.trim())
+    .filter(Boolean);
+
+  const normalized: string[] = [];
+  const seen = new Set<string>();
+
+  for (const part of parts) {
+    const match = part.toUpperCase().match(/(MLA)[-_\s]?(\d+)/);
+    if (!match) {
+      return {
+        normalized: [],
+        error: 'Ingresá links o IDs válidos de MercadoLibre, uno por línea.',
+      };
+    }
+
+    const itemId = `MLA${match[2]}`;
+    if (!seen.has(itemId)) {
+      seen.add(itemId);
+      normalized.push(itemId);
+    }
   }
 
-  return { normalized: `MLA${match[2]}`, error: null };
+  return { normalized, error: null };
 }
 
 function calculateVolumePreview(widthCm: string, heightCm: string, depthCm: string): string {
@@ -252,8 +268,10 @@ export default function Products() {
                         <span className="w-fit rounded-full bg-yellow-50 text-yellow-800 px-2 py-1 text-xs font-medium">
                           ML vinculado
                         </span>
-                        {p.ml_item_id && (
-                          <span className="font-mono text-[11px] text-gray-500">{p.ml_item_id}</span>
+                        {p.ml_item_ids.length > 0 && (
+                          <span className="font-mono text-[11px] text-gray-500">
+                            {p.ml_item_ids[0]}{p.ml_item_ids.length > 1 ? ` +${p.ml_item_ids.length - 1} más` : ''}
+                          </span>
                         )}
                       </div>
                     ) : (
@@ -478,7 +496,7 @@ function EditProductModal({
 }) {
   const [name, setName] = useState(product.name);
   const [sku, setSku] = useState(product.sku);
-  const [mlItemReference, setMlItemReference] = useState(product.ml_item_id ?? '');
+  const [mlItemReference, setMlItemReference] = useState(product.ml_item_ids?.join('\n') ?? product.ml_item_id ?? '');
   const [preparationType, setPreparationType] = useState<ProductPreparationType>(product.preparation_type ?? 'simple');
   const [locationId, setLocationId] = useState<string>(product.location_id?.toString() ?? '');
   const [widthCm, setWidthCm] = useState(product.width_cm?.toString() ?? '');
@@ -510,7 +528,7 @@ function EditProductModal({
       await updateProduct(product.id, {
         name,
         sku,
-        ml_item_reference: mlItemDetection.normalized,
+        ml_item_reference: mlItemReference.trim() || null,
         preparation_type: preparationType,
         width_cm: widthCm ? Number(widthCm) : null,
         height_cm: heightCm ? Number(heightCm) : null,
@@ -582,17 +600,29 @@ function EditProductModal({
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-900 mb-1">Link o ID de MercadoLibre</label>
-            <input
-              type="text"
+            <label className="block text-sm font-medium text-gray-900 mb-1">Links o IDs de MercadoLibre</label>
+            <textarea
               value={mlItemReference}
               onChange={(e) => setMlItemReference(e.target.value)}
-              className="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
-              placeholder="Pegá el link de MercadoLibre o el ID del producto"
+              rows={4}
+              className={`w-full px-4 py-2.5 border rounded-lg focus:ring-2 focus:border-blue-500 outline-none resize-y ${
+                mlItemDetection.error ? 'border-red-200 focus:ring-blue-500' : 'border-gray-200 focus:ring-blue-500'
+              }`}
+              placeholder="Pegá uno o varios links/IDs, uno por línea"
             />
-            <p className="text-xs text-gray-500 mt-1">
-              Si vaciás este campo, se elimina el mapping simple del producto.
-            </p>
+            {mlItemDetection.normalized.length > 0 && (
+              <p className="mt-1 text-xs text-green-700">
+                Publicaciones detectadas: {mlItemDetection.normalized.join(', ')}
+              </p>
+            )}
+            {mlItemDetection.error && (
+              <p className="mt-1 text-xs text-red-700">{mlItemDetection.error}</p>
+            )}
+            {!mlItemDetection.error && (
+              <p className="text-xs text-gray-500 mt-1">
+                Podés cargar varias publicaciones del mismo producto, una por línea. Si vaciás el campo, se eliminan los mappings simples.
+              </p>
+            )}
           </div>
 
           <div>
@@ -787,7 +817,8 @@ function CreateProductForm({
       setFormError(mlItemDetection.error);
       return;
     }
-    const createdWithMlMapping = Boolean(mlItemDetection.normalized);
+    const createdMappingsCount = mlItemDetection.normalized.length;
+    const createdWithMlMapping = createdMappingsCount > 0;
     const normalizedPrintQuantity = parseInt(printQuantity, 10);
     if (printOnCreate && (Number.isNaN(normalizedPrintQuantity) || normalizedPrintQuantity <= 0)) {
       setFormError('La cantidad de etiquetas debe ser mayor a 0.');
@@ -800,7 +831,7 @@ function CreateProductForm({
         name: name.trim(),
         sku: sku.trim(),
         client_id: parseInt(activeClientId, 10),
-        ml_item_reference: mlItemDetection.normalized,
+        ml_item_reference: mlItemReference.trim() || null,
         preparation_type: preparationType,
         width_cm: widthCm ? Number(widthCm) : null,
         height_cm: heightCm ? Number(heightCm) : null,
@@ -818,7 +849,7 @@ function CreateProductForm({
       if (printOnCreate) {
         try {
           await generateLabelsPDF([{ name: created.name, sku: created.sku }], normalizedPrintQuantity);
-          const message = `Producto creado + ${normalizedPrintQuantity} etiqueta${normalizedPrintQuantity !== 1 ? 's' : ''} generada${normalizedPrintQuantity !== 1 ? 's' : ''}.${createdWithMlMapping ? ' Mapping ML generado.' : ''}`;
+          const message = `Producto creado + ${normalizedPrintQuantity} etiqueta${normalizedPrintQuantity !== 1 ? 's' : ''} generada${normalizedPrintQuantity !== 1 ? 's' : ''}.${createdWithMlMapping ? ` ${createdMappingsCount} mapping${createdMappingsCount !== 1 ? 's' : ''} ML generado${createdMappingsCount !== 1 ? 's' : ''}.` : ''}`;
           setFeedback({ tone: 'success', text: message });
         } catch {
           setFeedback({
@@ -829,7 +860,7 @@ function CreateProductForm({
       } else {
         setFeedback({
           tone: 'success',
-          text: `Producto creado: ${created.name} (${created.sku})${createdWithMlMapping ? ' · Mapping ML generado' : ''}`,
+          text: `Producto creado: ${created.name} (${created.sku})${createdWithMlMapping ? ` · ${createdMappingsCount} mapping${createdMappingsCount !== 1 ? 's' : ''} ML generado${createdMappingsCount !== 1 ? 's' : ''}` : ''}`,
         });
       }
     } catch (err: unknown) {
@@ -1006,24 +1037,26 @@ function CreateProductForm({
           <p className="text-xs font-medium text-blue-700">Volumen estimado: {volumePreview}</p>
         </div>
         <div className="sm:col-span-2">
-          <label className="block text-sm font-medium text-gray-900 mb-1">Link o ID de MercadoLibre</label>
-          <input
-            type="text"
+          <label className="block text-sm font-medium text-gray-900 mb-1">Links o IDs de MercadoLibre</label>
+          <textarea
             value={mlItemReference}
             onChange={(e) => setMlItemReference(e.target.value)}
-            className={`w-full px-4 py-2.5 border rounded-lg focus:ring-2 focus:border-blue-500 outline-none ${
+            rows={4}
+            className={`w-full px-4 py-2.5 border rounded-lg focus:ring-2 focus:border-blue-500 outline-none resize-y ${
               mlItemDetection.error ? 'border-red-200 focus:ring-blue-500' : 'border-gray-200 focus:ring-blue-500'
             }`}
-            placeholder="Pegá el link de MercadoLibre o el ID del producto"
+            placeholder="Pegá uno o varios links/IDs, uno por línea"
           />
-          {mlItemDetection.normalized && (
-            <p className="mt-1 text-xs text-green-700">Item detectado: {mlItemDetection.normalized}</p>
+          {mlItemDetection.normalized.length > 0 && (
+            <p className="mt-1 text-xs text-green-700">
+              Publicaciones detectadas: {mlItemDetection.normalized.join(', ')}
+            </p>
           )}
           {mlItemDetection.error && (
             <p className="mt-1 text-xs text-red-700">{mlItemDetection.error}</p>
           )}
-          {!mlItemDetection.normalized && !mlItemDetection.error && (
-            <p className="mt-1 text-xs text-gray-500">Campo opcional. Si lo completás, se crea el mapping inicial automáticamente.</p>
+          {!mlItemDetection.error && (
+            <p className="mt-1 text-xs text-gray-500">Campo opcional. Podés cargar varias publicaciones del mismo producto, una por línea.</p>
           )}
         </div>
         <div className="rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 sm:col-span-2">

@@ -50,6 +50,7 @@ class ProductResponse(BaseModel):
     sku: str
     has_ml_mapping: bool = False
     ml_item_id: str | None = None
+    ml_item_ids: list[str] = []
     barcode: str | None
     description: str | None
     weight_kg: float | None

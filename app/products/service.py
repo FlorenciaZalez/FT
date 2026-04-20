@@ -92,60 +92,46 @@ async def _load_direct_ml_mappings(db: AsyncSession, product_id: int) -> list[ML
     result = await db.execute(
         select(MLProductMapping).where(
             MLProductMapping.product_id == product_id,
-            MLProductMapping.is_active.is_(True),
             MLProductMapping.ml_variation_id.is_(None),
         )
     )
     return result.scalars().all()
 
 
-async def _sync_direct_ml_mapping(
+async def _sync_direct_ml_mappings(
     db: AsyncSession,
     user: User,
     product: Product,
     ml_item_reference: str | None,
 ) -> None:
     direct_mappings = await _load_direct_ml_mappings(db, product.id)
-    if len(direct_mappings) > 1:
-        raise BadRequestError(
-            "Este producto tiene multiples mappings simples de MercadoLibre. Gestionarlos desde la pantalla de mappings."
-        )
+    normalized_item_ids = mercadolibre_service.normalize_ml_item_ids(ml_item_reference)
+    desired_item_ids = set(normalized_item_ids)
+    current_by_item_id = {mapping.ml_item_id: mapping for mapping in direct_mappings}
 
-    current_mapping = direct_mappings[0] if direct_mappings else None
-    normalized_ml_item_id = mercadolibre_service.normalize_ml_item_id(ml_item_reference)
+    for mapping in direct_mappings:
+        if mapping.ml_item_id in desired_item_ids:
+            mapping.is_active = True
+            mapping.ml_account_id = None
+        else:
+            await db.delete(mapping)
 
-    if normalized_ml_item_id is None:
-        if current_mapping is not None:
-            await db.delete(current_mapping)
-            await db.flush()
-        return
-
-    if current_mapping is None:
+    for ml_item_id in normalized_item_ids:
+        if ml_item_id in current_by_item_id:
+            continue
         await mercadolibre_service.create_mapping(
             db,
             user,
             {
                 "client_id": product.client_id,
                 "product_id": product.id,
-                "ml_item_id": normalized_ml_item_id,
+                "ml_item_id": ml_item_id,
                 "ml_variation_id": None,
                 "ml_account_id": None,
             },
         )
-        return
 
-    if current_mapping.ml_item_id == normalized_ml_item_id:
-        return
-
-    await mercadolibre_service.update_mapping(
-        db,
-        current_mapping.id,
-        user,
-        {
-            "ml_item_id": normalized_ml_item_id,
-            "is_active": True,
-        },
-    )
+    await db.flush()
 
 
 async def _validate_location(db: AsyncSession, location_id: int | None) -> None:
@@ -219,7 +205,7 @@ async def create_product(db: AsyncSession, user: User, data: dict) -> Product:
         product.alta_cobrada = True
         await db.flush()
 
-    await _sync_direct_ml_mapping(db, user, product, ml_item_reference)
+    await _sync_direct_ml_mappings(db, user, product, ml_item_reference)
 
     await db.refresh(product)
     return await get_product(db, product.id, user)
@@ -248,7 +234,7 @@ async def update_product(db: AsyncSession, product_id: int, user: User, data: di
     await db.flush()
 
     if ml_item_reference is not _ML_REFERENCE_UNSET:
-        await _sync_direct_ml_mapping(db, user, product, ml_item_reference)
+        await _sync_direct_ml_mappings(db, user, product, ml_item_reference)
 
     await db.refresh(product)
     return await get_product(db, product.id, user)
