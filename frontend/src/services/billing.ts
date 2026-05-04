@@ -7,6 +7,7 @@ export interface BillingRates {
   preparation_base_fee: number;
   preparation_additional_fee: number;
   product_creation_fee: number;
+  label_print_fee: number;
   transport_dispatch_fee: number;
   truck_unloading_fee: number;
   shipping_base: number;
@@ -44,6 +45,8 @@ export interface BillingPreviewItem {
   preparation_amount: number;
   product_creation_amount: number;
   product_creation_products: string[];
+  label_print_amount: number;
+  label_print_count: number;
   transport_dispatch_amount: number;
   transport_dispatch_count: number;
   transport_dispatch_transporters: string[];
@@ -102,6 +105,7 @@ export interface Charge {
   storage_amount: number;
   preparation_amount: number;
   product_creation_amount: number;
+  label_print_amount: number;
   transport_dispatch_amount: number;
   truck_unloading_amount: number;
   manual_charge_amount: number;
@@ -121,6 +125,7 @@ export interface BillingDocument {
   storage_total: number;
   preparation_total: number;
   product_creation_total: number;
+  label_print_total: number;
   transport_dispatch_total: number;
   truck_unloading_total: number;
   manual_charge_total: number;
@@ -175,6 +180,7 @@ function normalizeBillingRates(data: BillingRates): BillingRates {
     preparation_base_fee: toFiniteNumber(data.preparation_base_fee),
     preparation_additional_fee: toFiniteNumber(data.preparation_additional_fee),
     product_creation_fee: toFiniteNumber(data.product_creation_fee),
+    label_print_fee: toFiniteNumber(data.label_print_fee),
     transport_dispatch_fee: toFiniteNumber(data.transport_dispatch_fee),
     truck_unloading_fee: toFiniteNumber(data.truck_unloading_fee),
     shipping_base: toFiniteNumber(data.shipping_base),
@@ -209,6 +215,8 @@ function normalizeBillingPreviewItem(data: BillingPreviewItem): BillingPreviewIt
     storage_amount: toFiniteNumber(data.storage_amount),
     preparation_amount: toFiniteNumber(data.preparation_amount),
     product_creation_amount: toFiniteNumber(data.product_creation_amount),
+    label_print_amount: toFiniteNumber(data.label_print_amount),
+    label_print_count: Math.trunc(toFiniteNumber(data.label_print_count)),
     product_creation_products: Array.isArray(data.product_creation_products) ? data.product_creation_products : [],
     transport_dispatch_amount: toFiniteNumber(data.transport_dispatch_amount),
     transport_dispatch_count: Math.trunc(toFiniteNumber(data.transport_dispatch_count)),
@@ -249,6 +257,7 @@ function normalizeCharge(data: Charge): Charge {
     storage_amount: toFiniteNumber(data.storage_amount),
     preparation_amount: toFiniteNumber(data.preparation_amount),
     product_creation_amount: toFiniteNumber(data.product_creation_amount),
+    label_print_amount: toFiniteNumber(data.label_print_amount),
     transport_dispatch_amount: toFiniteNumber(data.transport_dispatch_amount),
     truck_unloading_amount: toFiniteNumber(data.truck_unloading_amount),
     manual_charge_amount: toFiniteNumber(data.manual_charge_amount),
@@ -263,6 +272,7 @@ function normalizeBillingDocument(data: BillingDocument): BillingDocument {
     storage_total: toFiniteNumber(data.storage_total),
     preparation_total: toFiniteNumber(data.preparation_total),
     product_creation_total: toFiniteNumber(data.product_creation_total),
+    label_print_total: toFiniteNumber(data.label_print_total),
     transport_dispatch_total: toFiniteNumber(data.transport_dispatch_total),
     truck_unloading_total: toFiniteNumber(data.truck_unloading_total),
     manual_charge_total: toFiniteNumber(data.manual_charge_total),
@@ -277,7 +287,7 @@ export async function fetchGlobalBillingRates(): Promise<BillingRates> {
 }
 
 export async function updateGlobalBillingRates(
-  payload: Pick<BillingRates, 'storage_per_m3' | 'preparation_base_fee' | 'preparation_additional_fee' | 'product_creation_fee' | 'transport_dispatch_fee' | 'truck_unloading_fee' | 'shipping_base'>,
+  payload: Pick<BillingRates, 'storage_per_m3' | 'preparation_base_fee' | 'preparation_additional_fee' | 'product_creation_fee' | 'label_print_fee' | 'transport_dispatch_fee' | 'truck_unloading_fee' | 'shipping_base'>,
 ): Promise<BillingRates> {
   const { data } = await api.put<BillingRates>('/billing/rates/global', payload);
   return normalizeBillingRates(data);

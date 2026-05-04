@@ -5,7 +5,7 @@ import { useProducts } from '../hooks/useProducts';
 import { fetchClients, type Client } from '../services/clients';
 import { fetchStock, fetchStockMovements, type StockItem, type StockMovement } from '../services/stock';
 import { fetchLocations, type Location } from '../services/locations';
-import type { Product, ProductCreatePayload, ProductPreparationType, ProductUpdatePayload } from '../services/products';
+import { recordFirstProductLabelPrint, type Product, type ProductCreatePayload, type ProductPreparationType, type ProductUpdatePayload } from '../services/products';
 import { generateLabelsPDF } from '../utils/labels';
 import SuccessToast from '../components/SuccessToast';
 
@@ -849,12 +849,13 @@ function CreateProductForm({
       if (printOnCreate) {
         try {
           await generateLabelsPDF([{ name: created.name, sku: created.sku }], normalizedPrintQuantity);
+          await recordFirstProductLabelPrint(created.id);
           const message = `Producto creado + ${normalizedPrintQuantity} etiqueta${normalizedPrintQuantity !== 1 ? 's' : ''} generada${normalizedPrintQuantity !== 1 ? 's' : ''}.${createdWithMlMapping ? ` ${createdMappingsCount} mapping${createdMappingsCount !== 1 ? 's' : ''} ML generado${createdMappingsCount !== 1 ? 's' : ''}.` : ''}`;
           setFeedback({ tone: 'success', text: message });
         } catch {
           setFeedback({
             tone: 'warning',
-            text: 'Producto creado. No se pudieron generar las etiquetas automáticamente.',
+            text: 'Producto creado. No se pudieron generar o registrar las etiquetas automáticamente.',
           });
         }
       } else {
@@ -1133,9 +1134,10 @@ function LabelPrintModal({
 
     try {
       await generateLabelsPDF([{ name: product.name, sku: product.sku }], normalizedQuantity);
+      await recordFirstProductLabelPrint(product.id);
       onPrinted(normalizedQuantity);
     } catch {
-      setFormError('No se pudieron generar las etiquetas con código de barras.');
+      setFormError('No se pudieron generar o registrar las etiquetas con código de barras.');
     } finally {
       setPrinting(false);
     }

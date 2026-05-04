@@ -28,6 +28,7 @@ from app.billing.models import (  # noqa: F401
 	Charge,
 	MerchandiseReceptionRecord,
 	ProductCreationRecord,
+	LabelPrintRecord,
 	TransportDispatchRecord,
 	BillingDocument,
 	BillingSchedule,

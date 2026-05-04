@@ -82,3 +82,13 @@ async def delete_product(
     db: AsyncSession = Depends(get_db),
 ):
     await service.delete_product(db, product_id, user)
+
+
+@router.post("/{product_id}/record-first-label-print")
+async def record_first_label_print(
+    product_id: int,
+    user: User = Depends(require_any),
+    db: AsyncSession = Depends(get_db),
+):
+    recorded = await service.record_first_label_print(db, product_id, user)
+    return {"recorded": recorded}

@@ -29,6 +29,7 @@ class BillingRates(Base):
     preparation_price_simple: Mapped[float] = mapped_column(Numeric(12, 2), nullable=False, default=0)
     preparation_price_special: Mapped[float] = mapped_column(Numeric(12, 2), nullable=False, default=0)
     product_creation_fee: Mapped[float] = mapped_column(Numeric(12, 2), nullable=False, default=0)
+    label_print_fee: Mapped[float] = mapped_column(Numeric(12, 2), nullable=False, default=0)
     transport_dispatch_fee: Mapped[float] = mapped_column(Numeric(12, 2), nullable=False, default=0)
     truck_unloading_fee: Mapped[float] = mapped_column(Numeric(12, 2), nullable=False, default=0)
     shipping_base: Mapped[float] = mapped_column(Numeric(12, 2), nullable=False, default=0)
@@ -106,6 +107,7 @@ class Charge(Base):
     storage_amount: Mapped[float] = mapped_column(Numeric(14, 2), nullable=False, default=0)
     preparation_amount: Mapped[float] = mapped_column(Numeric(14, 2), nullable=False, default=0)
     product_creation_amount: Mapped[float] = mapped_column(Numeric(14, 2), nullable=False, default=0)
+    label_print_amount: Mapped[float] = mapped_column(Numeric(14, 2), nullable=False, default=0)
     transport_dispatch_amount: Mapped[float] = mapped_column(Numeric(14, 2), nullable=False, default=0)
     truck_unloading_amount: Mapped[float] = mapped_column(Numeric(14, 2), nullable=False, default=0)
     manual_charge_amount: Mapped[float] = mapped_column(Numeric(14, 2), nullable=False, default=0)
@@ -174,6 +176,28 @@ class ProductCreationRecord(Base):
 
     client = relationship("Client")
     product = relationship("Product")
+
+
+class LabelPrintRecord(Base):
+    __tablename__ = "label_print_records"
+    __table_args__ = (UniqueConstraint("order_id", name="uq_label_print_record_order_id"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    client_id: Mapped[int] = mapped_column(
+        ForeignKey("clients.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    order_id: Mapped[int | None] = mapped_column(
+        ForeignKey("orders.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    order_number: Mapped[str] = mapped_column(String(100), nullable=False)
+    label_type: Mapped[str | None] = mapped_column(String(20))
+    price_applied: Mapped[float] = mapped_column(Numeric(12, 2), nullable=False)
+    printed_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False, index=True
+    )
+
+    client = relationship("Client")
+    order = relationship("Order")
 
 
 class TransportDispatchRecord(Base):
@@ -268,6 +292,7 @@ class BillingDocument(Base):
     storage_total: Mapped[float] = mapped_column(Numeric(14, 2), nullable=False, default=0)
     preparation_total: Mapped[float] = mapped_column(Numeric(14, 2), nullable=False, default=0)
     product_creation_total: Mapped[float] = mapped_column(Numeric(14, 2), nullable=False, default=0)
+    label_print_total: Mapped[float] = mapped_column(Numeric(14, 2), nullable=False, default=0)
     transport_dispatch_total: Mapped[float] = mapped_column(Numeric(14, 2), nullable=False, default=0)
     truck_unloading_total: Mapped[float] = mapped_column(Numeric(14, 2), nullable=False, default=0)
     manual_charge_total: Mapped[float] = mapped_column(Numeric(14, 2), nullable=False, default=0)

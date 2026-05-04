@@ -72,3 +72,8 @@ export async function updateProduct(id: number, payload: ProductUpdatePayload): 
 export async function deleteProduct(id: number): Promise<void> {
   await api.delete(`/products/${id}`);
 }
+
+export async function recordFirstProductLabelPrint(id: number): Promise<{ recorded: boolean }> {
+  const { data } = await api.post<{ recorded: boolean }>(`/products/${id}/record-first-label-print`);
+  return data;
+}

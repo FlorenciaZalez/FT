@@ -24,6 +24,7 @@ import {
   type ManualCharge,
 } from '../services/billing';
 import { formatCurrency, formatNumber, getChargeStatusClasses, getCurrentPeriod, toFiniteNumber } from '../utils/billingFormat';
+import { downloadBillingDocumentPdf } from '../utils/billingPdf';
 
 type EditableClientRate = {
   client_id: number;
@@ -57,6 +58,7 @@ export default function Billing() {
     preparation_base_fee: '0',
     preparation_additional_fee: '0',
     product_creation_fee: '0',
+    label_print_fee: '0',
     transport_dispatch_fee: '0',
     truck_unloading_fee: '0',
     shipping_base: '0',
@@ -164,6 +166,7 @@ export default function Billing() {
           preparation_base_fee: String(ratesData.preparation_base_fee),
           preparation_additional_fee: String(ratesData.preparation_additional_fee),
           product_creation_fee: String(ratesData.product_creation_fee),
+          label_print_fee: String(ratesData.label_print_fee),
           transport_dispatch_fee: String(ratesData.transport_dispatch_fee),
           truck_unloading_fee: String(ratesData.truck_unloading_fee),
           shipping_base: String(ratesData.shipping_base),
@@ -207,6 +210,7 @@ export default function Billing() {
     const preparationBaseFee = Number(globalRatesForm.preparation_base_fee);
     const preparationAdditionalFee = Number(globalRatesForm.preparation_additional_fee);
     const productCreationFee = Number(globalRatesForm.product_creation_fee);
+    const labelPrintFee = Number(globalRatesForm.label_print_fee);
     const transportDispatchFee = Number(globalRatesForm.transport_dispatch_fee);
     const truckUnloadingFee = Number(globalRatesForm.truck_unloading_fee);
     const shippingBase = Number(globalRatesForm.shipping_base);
@@ -216,6 +220,7 @@ export default function Billing() {
       !Number.isFinite(preparationBaseFee) ||
       !Number.isFinite(preparationAdditionalFee) ||
       !Number.isFinite(productCreationFee) ||
+      !Number.isFinite(labelPrintFee) ||
       !Number.isFinite(transportDispatchFee) ||
       !Number.isFinite(truckUnloadingFee) ||
       !Number.isFinite(shippingBase) ||
@@ -223,6 +228,7 @@ export default function Billing() {
       preparationBaseFee < 0 ||
       preparationAdditionalFee < 0 ||
       productCreationFee < 0 ||
+      labelPrintFee < 0 ||
       transportDispatchFee < 0 ||
       truckUnloadingFee < 0 ||
       shippingBase < 0
@@ -239,6 +245,7 @@ export default function Billing() {
         preparation_base_fee: preparationBaseFee,
         preparation_additional_fee: preparationAdditionalFee,
         product_creation_fee: productCreationFee,
+        label_print_fee: labelPrintFee,
         transport_dispatch_fee: transportDispatchFee,
         truck_unloading_fee: truckUnloadingFee,
         shipping_base: shippingBase,
@@ -319,6 +326,11 @@ export default function Billing() {
     } finally {
       setMarkingPaidId(null);
     }
+  };
+
+  const handleDownloadDocument = (document: BillingDocument) => {
+    const previewItem = preview.find((item) => item.client_id === document.client_id);
+    downloadBillingDocumentPdf(document, previewItem);
   };
 
   const handleCreateManualCharge = async (event: FormEvent) => {
@@ -588,6 +600,49 @@ export default function Billing() {
               <tbody>
                 {preview.map((item) => {
                   const isExpanded = expandedPreviewClientId === item.client_id;
+                  const breakdownRows = [
+                    {
+                      label: 'Storage',
+                      amount: toFiniteNumber(item.storage_amount),
+                      detail: `${formatNumber(toFiniteNumber(item.total_m3), 3)} m3 calculados · Base ${formatCurrency(toFiniteNumber(item.storage_base_rate))}`,
+                    },
+                    {
+                      label: 'Preparación',
+                      amount: toFiniteNumber(item.preparation_amount),
+                      detail: `Primer producto ${formatCurrency(toFiniteNumber(item.preparation_base_rate))} · Adicional ${formatCurrency(toFiniteNumber(item.preparation_rate))}`,
+                    },
+                    {
+                      label: 'Alta de producto',
+                      amount: toFiniteNumber(item.product_creation_amount),
+                      detail: item.product_creation_products.length > 0 ? item.product_creation_products.join(', ') : 'Sin altas en el período',
+                    },
+                    {
+                      label: 'Primera etiqueta',
+                      amount: toFiniteNumber(item.label_print_amount),
+                      detail: item.label_print_count > 0 ? `${formatNumber(item.label_print_count, 0)} primera(s) impresión(es)` : 'Sin primeras impresiones en el período',
+                    },
+                    {
+                      label: 'Traslados a transporte',
+                      amount: toFiniteNumber(item.transport_dispatch_amount),
+                      detail: item.transport_dispatch_count > 0 ? `${formatNumber(item.transport_dispatch_count, 0)} viaje(s)` : 'Sin traslados en el período',
+                    },
+                    {
+                      label: 'Descargas',
+                      amount: toFiniteNumber(item.truck_unloading_amount),
+                      detail: item.truck_unloading_count > 0 ? `${formatNumber(item.truck_unloading_count, 0)} camión(es)` : 'Sin descargas en el período',
+                    },
+                    {
+                      label: 'Cargos manuales',
+                      amount: toFiniteNumber(item.manual_charge_amount),
+                      detail: item.manual_charge_items.length > 0 ? `${item.manual_charge_items.length} movimiento(s)` : 'Sin cargos manuales en el período',
+                    },
+                    {
+                      label: 'Envíos',
+                      amount: toFiniteNumber(item.shipping_amount),
+                      detail: `Base ${formatCurrency(toFiniteNumber(item.shipping_base_amount))}`,
+                    },
+                  ].filter((row) => Math.abs(row.amount) > 0.00001);
+
                   return (
                     <Fragment key={item.client_id}>
                       <tr
@@ -633,78 +688,40 @@ export default function Billing() {
                       {isExpanded && (
                         <tr className="border-b border-gray-200 bg-gray-50 last:border-b-0">
                           <td colSpan={isAdmin ? 7 : isClient ? 5 : 6} className="px-6 py-5">
-                            <div className="grid grid-cols-1 xl:grid-cols-[1.2fr_0.8fr] gap-5">
-                              <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
-                                <DetailMetricCard
-                                  label="Storage"
-                                  value={formatCurrency(toFiniteNumber(item.storage_amount))}
-                                  note={`${formatNumber(toFiniteNumber(item.total_m3), 3)} m3 · Base ${formatCurrency(toFiniteNumber(item.storage_base_rate))}`}
-                                />
-                                <DetailMetricCard
-                                  label="Preparación"
-                                  value={formatCurrency(toFiniteNumber(item.preparation_amount))}
-                                  note={`Primer producto ${formatCurrency(toFiniteNumber(item.preparation_base_rate))} · Adicional ${formatCurrency(toFiniteNumber(item.preparation_rate))}`}
-                                />
-                                <DetailMetricCard
-                                  label="Alta producto"
-                                  value={formatCurrency(toFiniteNumber(item.product_creation_amount))}
-                                  note={item.product_creation_products.length > 0 ? item.product_creation_products.join(', ') : 'Sin altas en el período'}
-                                />
-                                <DetailMetricCard
-                                  label="Traslados a transporte"
-                                  value={formatCurrency(toFiniteNumber(item.transport_dispatch_amount))}
-                                  note={item.transport_dispatch_count > 0 ? `Base ${formatCurrency(toFiniteNumber(item.transport_dispatch_amount) / item.transport_dispatch_count)} × ${formatNumber(item.transport_dispatch_count, 0)} viaje${item.transport_dispatch_count !== 1 ? 's' : ''} = ${formatCurrency(toFiniteNumber(item.transport_dispatch_amount))}` : 'Sin traslados en el período'}
-                                />
-                                <DetailMetricCard
-                                  label="Descargas"
-                                  value={formatCurrency(toFiniteNumber(item.truck_unloading_amount))}
-                                  note={item.truck_unloading_count > 0 ? `Base ${formatCurrency(toFiniteNumber(item.truck_unloading_amount) / item.truck_unloading_count)} × ${formatNumber(item.truck_unloading_count, 0)} camión${item.truck_unloading_count !== 1 ? 'es' : ''} = ${formatCurrency(toFiniteNumber(item.truck_unloading_amount))}` : 'Sin descargas en el período'}
-                                />
-                                <DetailMetricCard
-                                  label="Cargos manuales"
-                                  value={formatCurrency(toFiniteNumber(item.manual_charge_amount))}
-                                  note={item.manual_charge_items.length > 0 ? `${item.manual_charge_items.length} movimiento${item.manual_charge_items.length !== 1 ? 's' : ''} manual${item.manual_charge_items.length !== 1 ? 'es' : ''}` : 'Sin cargos manuales en el período'}
-                                />
-                                <DetailMetricCard
-                                  label="Envíos"
-                                  value={formatCurrency(toFiniteNumber(item.shipping_amount))}
-                                  note={`Base ${formatCurrency(toFiniteNumber(item.shipping_base_amount))}`}
-                                />
-                                <DetailMetricCard
-                                  label="Descuentos"
-                                  value={`S ${formatNumber(toFiniteNumber(item.storage_discount_pct), 2)}% · E ${formatNumber(toFiniteNumber(item.shipping_discount_pct), 2)}%`}
-                                  note="Preparación sin descuento porcentual"
-                                />
-                              </div>
-                              <div className="space-y-4">
-                                <div className="rounded-2xl border border-gray-200 bg-white p-4">
-                                  <div className="text-xs font-medium uppercase tracking-wide text-gray-500">Total cliente</div>
-                                  <div className="text-3xl font-bold text-gray-900 mt-2">{formatCurrency(toFiniteNumber(item.total))}</div>
-                                  <div className="mt-3 space-y-2 text-sm text-gray-500">
-                                    <p>Pedidos despachados: <span className="font-medium text-gray-900">{formatNumber(toFiniteNumber(item.total_orders), 0)}</span></p>
-                                    {!isClient && <p>Estado: <span className={`font-medium ${item.missing_storage ? 'text-yellow-800' : 'text-green-700'}`}>{item.missing_storage ? 'Faltan datos' : 'Listo para facturar'}</span></p>}
+                            <div className="grid items-start grid-cols-1 gap-5">
+                              <div className="rounded-2xl border border-gray-200 bg-white overflow-hidden">
+                                <div className="px-4 py-3 border-b border-gray-200 flex items-center justify-between gap-4">
+                                  <div>
+                                    <div className="text-sm font-semibold text-gray-900">Detalle de conceptos</div>
+                                    <div className="text-xs text-gray-500 mt-1">Sólo se muestran conceptos con importe en este período.</div>
                                   </div>
+                                  <div className="text-sm font-semibold text-gray-900">{formatCurrency(toFiniteNumber(item.total))}</div>
                                 </div>
-                                <div className="rounded-2xl border border-gray-200 bg-white p-4">
-                                  <div className="text-xs font-medium uppercase tracking-wide text-gray-500">Desglose de cargos manuales</div>
-                                  {item.manual_charge_items.length === 0 ? (
-                                    <div className="text-sm text-gray-500 mt-3">Sin cargos manuales para este cliente en el período.</div>
-                                  ) : (
-                                    <div className="mt-3 space-y-3">
-                                      {item.manual_charge_items.map((charge) => (
-                                        <div key={charge.id} className="rounded-xl border border-gray-200 px-3 py-3">
-                                          <div className="flex items-start justify-between gap-3">
-                                            <div>
-                                              <div className="text-sm font-medium text-gray-900">{charge.descripcion || 'Cargo manual'}</div>
-                                              <div className="text-xs text-gray-500 mt-1">{new Date(charge.fecha).toLocaleDateString('es-AR')}{charge.tipo ? ` · ${charge.tipo}` : ''}</div>
-                                            </div>
-                                            <div className={`text-sm font-semibold ${charge.monto < 0 ? 'text-red-700' : 'text-gray-900'}`}>{formatCurrency(toFiniteNumber(charge.monto))}</div>
-                                          </div>
-                                        </div>
-                                      ))}
-                                    </div>
-                                  )}
-                                </div>
+
+                                {breakdownRows.length === 0 ? (
+                                  <div className="px-4 py-4 text-sm text-gray-500">No hay conceptos facturables para este cliente en el período.</div>
+                                ) : (
+                                  <div className="overflow-x-auto">
+                                    <table className="w-full min-w-[620px] text-sm">
+                                      <thead>
+                                        <tr className="bg-gray-50 border-b border-gray-200">
+                                          <th className="px-4 py-3 text-left font-medium text-gray-500">Concepto</th>
+                                          <th className="px-4 py-3 text-left font-medium text-gray-500">Referencia</th>
+                                          <th className="px-4 py-3 text-right font-medium text-gray-500">Importe</th>
+                                        </tr>
+                                      </thead>
+                                      <tbody>
+                                        {breakdownRows.map((row) => (
+                                          <tr key={row.label} className="border-b border-gray-100 last:border-b-0 align-top">
+                                            <td className="px-4 py-3 font-medium text-gray-900">{row.label}</td>
+                                            <td className="px-4 py-3 text-gray-500">{row.detail}</td>
+                                            <td className="px-4 py-3 text-right font-semibold text-gray-900 whitespace-nowrap">{formatCurrency(row.amount)}</td>
+                                          </tr>
+                                        ))}
+                                      </tbody>
+                                    </table>
+                                  </div>
+                                )}
                               </div>
                             </div>
                           </td>
@@ -771,7 +788,7 @@ export default function Billing() {
                   <th className="text-right px-4 py-3 font-medium text-gray-500">Total</th>
                   <th className="text-left px-4 py-3 font-medium text-gray-500">Vencimiento</th>
                   <th className="text-left px-4 py-3 font-medium text-gray-500">Estado</th>
-                  {isAdmin && <th className="text-right px-6 py-3 font-medium text-gray-500">Acciones</th>}
+                  <th className="text-right px-6 py-3 font-medium text-gray-500">Acciones</th>
                 </tr>
               </thead>
               <tbody>
@@ -780,7 +797,7 @@ export default function Billing() {
                     <td className="px-6 py-4">
                       <div className="font-medium text-gray-900">{document.client_name}</div>
                       <div className="text-xs text-gray-500 mt-1">
-                        Storage {formatCurrency(document.storage_total)} · Preparación {formatCurrency(document.preparation_total)} · Alta {formatCurrency(document.product_creation_total)} · Traslados a transporte {formatCurrency(document.transport_dispatch_total)} · Descargas {formatCurrency(document.truck_unloading_total)} · Cargos manuales {formatCurrency(document.manual_charge_total)} · Envío {formatCurrency(document.shipping_total)}
+                        Storage {formatCurrency(document.storage_total)} · Preparación {formatCurrency(document.preparation_total)} · Alta {formatCurrency(document.product_creation_total)} · Etiquetas {formatCurrency(document.label_print_total)} · Traslados a transporte {formatCurrency(document.transport_dispatch_total)} · Descargas {formatCurrency(document.truck_unloading_total)} · Cargos manuales {formatCurrency(document.manual_charge_total)} · Envío {formatCurrency(document.shipping_total)}
                       </div>
                     </td>
                     <td className="px-4 py-4 text-gray-500">{document.period}</td>
@@ -789,27 +806,33 @@ export default function Billing() {
                     <td className="px-4 py-4">
                       <DocumentStatusBadge status={document.status} />
                     </td>
-                    {isAdmin && (
-                      <td className="px-6 py-4">
-                        <div className="flex justify-end gap-2">
-                          {document.status !== 'paid' && (
-                            <button
-                              onClick={() => handleMarkPaid(document.id).catch(() => {})}
-                              disabled={markingPaidId === document.id}
-                              className="px-3 py-1.5 text-xs font-medium text-green-700 bg-green-50 rounded-lg hover:bg-green-100 transition disabled:opacity-50"
-                            >
-                              {markingPaidId === document.id ? 'Procesando...' : 'Marcar como pagado'}
-                            </button>
-                          )}
+                    <td className="px-6 py-4">
+                      <div className="flex justify-end gap-2">
+                        <button
+                          onClick={() => handleDownloadDocument(document)}
+                          className="px-3 py-1.5 text-xs font-medium text-blue-700 bg-blue-50 rounded-lg hover:bg-blue-100 transition"
+                        >
+                          Imprimir remito
+                        </button>
+                        {isAdmin && document.status !== 'paid' && (
+                          <button
+                            onClick={() => handleMarkPaid(document.id).catch(() => {})}
+                            disabled={markingPaidId === document.id}
+                            className="px-3 py-1.5 text-xs font-medium text-green-700 bg-green-50 rounded-lg hover:bg-green-100 transition disabled:opacity-50"
+                          >
+                            {markingPaidId === document.id ? 'Procesando...' : 'Marcar como pagado'}
+                          </button>
+                        )}
+                        {isAdmin && (
                           <button
                             onClick={() => navigate('/billing/history')}
                             className="px-3 py-1.5 text-xs font-medium text-gray-900 bg-gray-50 rounded-lg hover:bg-gray-200 transition"
                           >
                             Ver cobros
                           </button>
-                        </div>
-                      </td>
-                    )}
+                        )}
+                      </div>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -881,13 +904,14 @@ function GlobalRatesModal({
     preparation_base_fee: string;
     preparation_additional_fee: string;
     product_creation_fee: string;
+    label_print_fee: string;
     transport_dispatch_fee: string;
     truck_unloading_fee: string;
     shipping_base: string;
   };
   saving: boolean;
   onClose: () => void;
-  onChange: (field: 'storage_per_m3' | 'preparation_base_fee' | 'preparation_additional_fee' | 'product_creation_fee' | 'transport_dispatch_fee' | 'truck_unloading_fee' | 'shipping_base', value: string) => void;
+  onChange: (field: 'storage_per_m3' | 'preparation_base_fee' | 'preparation_additional_fee' | 'product_creation_fee' | 'label_print_fee' | 'transport_dispatch_fee' | 'truck_unloading_fee' | 'shipping_base', value: string) => void;
   onSubmit: (event: FormEvent) => Promise<void>;
 }) {
   return (
@@ -923,6 +947,11 @@ function GlobalRatesModal({
                 label="Costo alta de producto"
                 value={form.product_creation_fee}
                 onChange={(value) => onChange('product_creation_fee', value)}
+              />
+              <RateField
+                label="Costo primera impresión de etiqueta"
+                value={form.label_print_fee}
+                onChange={(value) => onChange('label_print_fee', value)}
               />
               <RateField
                 label="Precio por traslado a transporte"
@@ -1207,16 +1236,6 @@ function getApiErrorMessage(error: unknown, fallback: string) {
   return (
     (error as { response?: { data?: { detail?: string } } })?.response?.data?.detail ??
     fallback
-  );
-}
-
-function DetailMetricCard({ label, value, note }: { label: string; value: string; note: string }) {
-  return (
-    <div className="rounded-2xl border border-gray-200 bg-white px-4 py-3">
-      <div className="text-xs font-medium uppercase tracking-wide text-gray-500">{label}</div>
-      <div className="text-lg font-semibold text-gray-900 mt-2">{value}</div>
-      <div className="text-xs text-gray-500 mt-2">{note}</div>
-    </div>
   );
 }
 

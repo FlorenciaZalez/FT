@@ -21,13 +21,14 @@ from app.billing.models import (
     ManualCharge,
     MerchandiseReceptionRecord,
     ProductCreationRecord,
+    LabelPrintRecord,
     PreparationRecord,
     TransportDispatchRecord,
 )
 from app.clients.models import Client
 from app.common.exceptions import BadRequestError, NotFoundError
 from app.common.permissions import check_tenant_access
-from app.orders.models import Order, OrderItem, OrderStatus
+from app.orders.models import OrderItem, OrderStatus
 from app.products.models import Product
 from app.stock.models import Stock
 from app.stock.movement_models import MovementType, StockMovement
@@ -64,6 +65,8 @@ class _ComputedCharge:
     preparation_amount: Decimal
     product_creation_amount: Decimal
     product_creation_products: list[str]
+    label_print_amount: Decimal
+    label_print_count: int
     transport_dispatch_amount: Decimal
     transport_dispatch_count: int
     transport_dispatch_transporters: list[str]
@@ -109,6 +112,7 @@ def _serialize_charge(charge: Charge, client_name: str | None = None) -> dict:
         "storage_amount": float(charge.storage_amount),
         "preparation_amount": float(charge.preparation_amount),
         "product_creation_amount": float(charge.product_creation_amount),
+        "label_print_amount": float(charge.label_print_amount),
         "transport_dispatch_amount": float(charge.transport_dispatch_amount),
         "truck_unloading_amount": float(charge.truck_unloading_amount),
         "manual_charge_amount": float(charge.manual_charge_amount),
@@ -142,6 +146,7 @@ def _serialize_billing_document(document: BillingDocument, client_name: str) -> 
         "storage_total": float(document.storage_total),
         "preparation_total": float(document.preparation_total),
         "product_creation_total": float(document.product_creation_total),
+        "label_print_total": float(document.label_print_total),
         "transport_dispatch_total": float(document.transport_dispatch_total),
         "truck_unloading_total": float(document.truck_unloading_total),
         "manual_charge_total": float(document.manual_charge_total),
@@ -454,6 +459,7 @@ async def _get_or_create_global_rates(db: AsyncSession) -> BillingRates:
             preparation_price_simple=0,
             preparation_price_special=0,
             product_creation_fee=0,
+            label_print_fee=0,
             transport_dispatch_fee=0,
             truck_unloading_fee=0,
             shipping_base=0,
@@ -623,6 +629,8 @@ async def _build_preview_rows(
 ) -> list[_ComputedCharge]:
     start, end = _parse_period(period)
     global_rates = await _get_or_create_global_rates(db)
+    current_product_creation_fee = _to_decimal(global_rates.product_creation_fee)
+    current_label_print_fee = _to_decimal(global_rates.label_print_fee)
 
     clients_query = select(Client).where(Client.is_active.is_(True)).order_by(Client.name)
     if user is not None and user.role == UserRole.client:
@@ -722,6 +730,67 @@ async def _build_preview_rows(
     product_creation_products_by_client: dict[int, list[str]] = {}
     for created_client_id, product_name in product_creation_names_rows.all():
         product_creation_products_by_client.setdefault(created_client_id, []).append(product_name)
+
+    missing_product_creation_rows = await db.execute(
+        select(Product.client_id, Product.name)
+        .outerjoin(ProductCreationRecord, ProductCreationRecord.product_id == Product.id)
+        .where(
+            Product.client_id.in_(client_ids),
+            ProductCreationRecord.id.is_(None),
+            Product.created_at >= start,
+            Product.created_at < end,
+        )
+        .order_by(Product.created_at.asc(), Product.id.asc())
+    )
+    missing_product_creation_products_by_client: dict[int, list[str]] = {}
+    for created_client_id, product_name in missing_product_creation_rows.all():
+        missing_product_creation_products_by_client.setdefault(created_client_id, []).append(product_name)
+
+    label_print_rows = await db.execute(
+        select(
+            LabelPrintRecord.client_id,
+            func.coalesce(func.sum(cast(LabelPrintRecord.price_applied, Numeric(14, 2))), 0),
+            func.count(LabelPrintRecord.id),
+        )
+        .where(
+            LabelPrintRecord.client_id.in_(client_ids),
+            LabelPrintRecord.label_type == "product",
+            LabelPrintRecord.printed_at >= start,
+            LabelPrintRecord.printed_at < end,
+        )
+        .group_by(LabelPrintRecord.client_id)
+    )
+    label_print_metrics_by_client = {
+        client_id: {
+            "amount": _to_decimal(total_amount),
+            "count": int(total_count or 0),
+        }
+        for client_id, total_amount, total_count in label_print_rows.all()
+    }
+    product_label_refs = [f"product:{product_id}" for product_id in client_ids]
+    existing_product_label_refs = set(
+        (
+            await db.execute(
+                select(LabelPrintRecord.order_number).where(
+                    LabelPrintRecord.label_type == "product",
+                    LabelPrintRecord.order_number.like("product:%"),
+                )
+            )
+        ).scalars().all()
+    )
+    missing_label_print_rows = await db.execute(
+        select(Product.client_id, Product.id)
+        .where(
+            Product.client_id.in_(client_ids),
+            Product.created_at >= start,
+            Product.created_at < end,
+        )
+    )
+    missing_label_print_count_by_client: dict[int, int] = {}
+    for label_client_id, product_id in missing_label_print_rows.all():
+        if f"product:{product_id}" in existing_product_label_refs:
+            continue
+        missing_label_print_count_by_client[label_client_id] = missing_label_print_count_by_client.get(label_client_id, 0) + 1
 
     transport_dispatch_rows = await db.execute(
         select(
@@ -855,8 +924,19 @@ async def _build_preview_rows(
         preparation_rate = _to_decimal(global_rates.preparation_additional_fee)
         preparation_amount = preparation_amount_by_client.get(client.id, Decimal("0.00"))
 
-        product_creation_amount = product_creation_amount_by_client.get(client.id, Decimal("0.00"))
-        product_creation_products = product_creation_products_by_client.get(client.id, [])
+        existing_product_creation_amount = product_creation_amount_by_client.get(client.id, Decimal("0.00"))
+        existing_product_creation_products = product_creation_products_by_client.get(client.id, [])
+        missing_product_creation_products = missing_product_creation_products_by_client.get(client.id, [])
+        product_creation_amount = _to_decimal(
+            existing_product_creation_amount + (current_product_creation_fee * Decimal(len(missing_product_creation_products)))
+        )
+        product_creation_products = [*existing_product_creation_products, *missing_product_creation_products]
+        label_print_metrics = label_print_metrics_by_client.get(client.id, {"amount": Decimal("0.00"), "count": 0})
+        missing_label_print_count = missing_label_print_count_by_client.get(client.id, 0)
+        label_print_amount = _to_decimal(
+            label_print_metrics["amount"] + (current_label_print_fee * Decimal(missing_label_print_count))
+        )
+        label_print_count = int(label_print_metrics["count"]) + missing_label_print_count
         transport_dispatch_metrics = transport_dispatch_metrics_by_client.get(client.id, {"amount": Decimal("0.00"), "count": 0})
         transport_dispatch_amount = transport_dispatch_metrics["amount"]
         transport_dispatch_count = int(transport_dispatch_metrics["count"])
@@ -867,7 +947,7 @@ async def _build_preview_rows(
         manual_charge_amount = manual_charge_amount_by_client.get(client.id, Decimal("0.00"))
         manual_charge_items = manual_charge_items_by_client.get(client.id, [])
         shipping_amount = _apply_discount(shipping_source_amount, shipping_discount_pct)
-        total = _to_decimal(storage_amount + preparation_amount + product_creation_amount + transport_dispatch_amount + truck_unloading_amount + manual_charge_amount + shipping_amount)
+        total = _to_decimal(storage_amount + preparation_amount + product_creation_amount + label_print_amount + transport_dispatch_amount + truck_unloading_amount + manual_charge_amount + shipping_amount)
         previews.append(
             _ComputedCharge(
                 client=client,
@@ -888,6 +968,8 @@ async def _build_preview_rows(
                 preparation_amount=preparation_amount,
                 product_creation_amount=product_creation_amount,
                 product_creation_products=product_creation_products,
+                label_print_amount=label_print_amount,
+                label_print_count=label_print_count,
                 transport_dispatch_amount=transport_dispatch_amount,
                 transport_dispatch_count=transport_dispatch_count,
                 transport_dispatch_transporters=transport_dispatch_transporters,
@@ -926,6 +1008,7 @@ async def _refresh_document_statuses(db: AsyncSession) -> None:
 
 
 async def preview_charges(db: AsyncSession, user: User, period: str) -> list[dict]:
+    await _ensure_historical_billing_records(db)
     previews = await _build_preview_rows(db, period, user)
     return [
         {
@@ -946,6 +1029,8 @@ async def preview_charges(db: AsyncSession, user: User, period: str) -> list[dic
             "preparation_amount": float(preview.preparation_amount),
             "product_creation_amount": float(preview.product_creation_amount),
             "product_creation_products": preview.product_creation_products,
+            "label_print_amount": float(preview.label_print_amount),
+            "label_print_count": preview.label_print_count,
             "transport_dispatch_amount": float(preview.transport_dispatch_amount),
             "transport_dispatch_count": preview.transport_dispatch_count,
             "transport_dispatch_transporters": preview.transport_dispatch_transporters,
@@ -962,6 +1047,7 @@ async def preview_charges(db: AsyncSession, user: User, period: str) -> list[dic
 
 
 async def generate_charges(db: AsyncSession, period: str, due_date: date | None, overwrite: bool) -> list[Charge]:
+    await _ensure_historical_billing_records(db)
     previews = await _build_preview_rows(db, period)
     if not previews:
         return []
@@ -1004,6 +1090,7 @@ async def generate_charges(db: AsyncSession, period: str, due_date: date | None,
         charge.storage_amount = preview.storage_amount
         charge.preparation_amount = preview.preparation_amount
         charge.product_creation_amount = preview.product_creation_amount
+        charge.label_print_amount = preview.label_print_amount
         charge.transport_dispatch_amount = preview.transport_dispatch_amount
         charge.truck_unloading_amount = preview.truck_unloading_amount
         charge.manual_charge_amount = preview.manual_charge_amount
@@ -1080,6 +1167,7 @@ async def generate_billing_documents(
     overwrite: bool = True,
     client_id: int | None = None,
 ) -> list[BillingDocument]:
+    await _ensure_historical_billing_records(db)
     previews = await _build_preview_rows(db, period)
     if not previews:
         return []
@@ -1131,6 +1219,7 @@ async def generate_billing_documents(
         document.storage_total = preview.storage_amount
         document.preparation_total = preview.preparation_amount
         document.product_creation_total = preview.product_creation_amount
+        document.label_print_total = preview.label_print_amount
         document.transport_dispatch_total = preview.transport_dispatch_amount
         document.truck_unloading_total = preview.truck_unloading_amount
         document.manual_charge_total = preview.manual_charge_amount
@@ -1359,6 +1448,131 @@ async def record_product_created(db: AsyncSession, product) -> None:
         price_applied=_to_decimal(rates.product_creation_fee),
     )
     db.add(record)
+
+
+async def _create_missing_product_creation_records(db: AsyncSession, rate: Decimal) -> None:
+    missing_products = (
+        await db.execute(
+            select(Product)
+            .outerjoin(ProductCreationRecord, ProductCreationRecord.product_id == Product.id)
+            .where(ProductCreationRecord.id.is_(None))
+            .order_by(Product.created_at.asc(), Product.id.asc())
+        )
+    ).scalars().all()
+
+    for product in missing_products:
+        db.add(
+            ProductCreationRecord(
+                client_id=product.client_id,
+                product_id=product.id,
+                product_name=product.name,
+                sku=product.sku,
+                price_applied=rate,
+                created_at=product.created_at,
+            )
+        )
+        product.alta_cobrada = True
+
+    existing_uncounted_products = (
+        await db.execute(
+            select(Product)
+            .join(ProductCreationRecord, ProductCreationRecord.product_id == Product.id)
+            .where(Product.alta_cobrada.is_(False))
+        )
+    ).scalars().all()
+    for product in existing_uncounted_products:
+        product.alta_cobrada = True
+
+
+def _product_label_reference(product_id: int) -> str:
+    return f"product:{product_id}"
+
+
+async def record_product_first_label_print(
+    db: AsyncSession,
+    product: Product,
+    printed_at: datetime | None = None,
+) -> bool:
+    if product.id is None:
+        return False
+
+    existing = (
+        await db.execute(
+            select(LabelPrintRecord.id).where(
+                LabelPrintRecord.label_type == "product",
+                LabelPrintRecord.order_number == _product_label_reference(product.id),
+            )
+        )
+    ).scalar_one_or_none()
+    if existing is not None:
+        return False
+
+    rates = await _get_or_create_global_rates(db)
+    db.add(
+        LabelPrintRecord(
+            client_id=product.client_id,
+            order_id=None,
+            order_number=_product_label_reference(product.id),
+            label_type="product",
+            price_applied=_to_decimal(rates.label_print_fee),
+            printed_at=printed_at or datetime.now(timezone.utc),
+        )
+    )
+    await db.flush()
+    return True
+
+
+async def _create_missing_product_label_print_records(db: AsyncSession, rate: Decimal) -> None:
+    existing_refs = set(
+        (
+            await db.execute(
+                select(LabelPrintRecord.order_number).where(
+                    LabelPrintRecord.label_type == "product",
+                    LabelPrintRecord.order_number.like("product:%"),
+                )
+            )
+        ).scalars().all()
+    )
+
+    products = (
+        await db.execute(select(Product).order_by(Product.created_at.asc(), Product.id.asc()))
+    ).scalars().all()
+
+    for product in products:
+        reference = _product_label_reference(product.id)
+        if reference in existing_refs:
+            continue
+        db.add(
+            LabelPrintRecord(
+                client_id=product.client_id,
+                order_id=None,
+                order_number=reference,
+                label_type="product",
+                price_applied=rate,
+                printed_at=product.created_at,
+            )
+        )
+        existing_refs.add(reference)
+
+
+async def record_first_label_print(
+    db: AsyncSession,
+    orders,
+    printed_at: datetime,
+    label_type,
+) -> None:
+    return None
+
+
+async def _create_missing_label_print_records(db: AsyncSession, rate: Decimal) -> None:
+    await _create_missing_product_label_print_records(db, rate)
+
+
+async def _ensure_historical_billing_records(db: AsyncSession) -> None:
+    rates = await _get_or_create_global_rates(db)
+    await _create_missing_product_creation_records(db, _to_decimal(rates.product_creation_fee))
+    await _create_missing_label_print_records(db, _to_decimal(rates.label_print_fee))
+    await db.flush()
 
 
 async def record_transport_dispatch(

@@ -1,6 +1,18 @@
 import { jsPDF } from 'jspdf';
-import type { Charge } from '../services/billing';
+import type { BillingDocument, BillingPreviewItem, Charge } from '../services/billing';
 import { formatCurrency, getChargeStatusLabel } from './billingFormat';
+
+function getBillingDocumentStatusLabel(status: BillingDocument['status']): string {
+  switch (status) {
+    case 'paid':
+      return 'Pagado';
+    case 'overdue':
+      return 'Vencido';
+    case 'pending':
+    default:
+      return 'Pendiente';
+  }
+}
 
 function buildFileName(prefix: string): string {
   const now = new Date();
@@ -75,4 +87,181 @@ export function downloadChargesPdf(charges: Charge[], title: string, filePrefix 
   });
 
   doc.save(buildFileName(filePrefix));
+}
+
+type BillingRemitoLine = {
+  label: string;
+  amount: number;
+  detail?: string;
+};
+
+export function downloadBillingDocumentPdf(document: BillingDocument, preview?: BillingPreviewItem): void {
+  const doc = new jsPDF({ unit: 'mm', format: 'a4' });
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const pageHeight = doc.internal.pageSize.getHeight();
+  const margin = 14;
+  const contentWidth = pageWidth - margin * 2;
+  let cursorY = margin;
+
+  const detailLines: BillingRemitoLine[] = [
+    {
+      label: 'Storage',
+      amount: document.storage_total,
+      detail: preview
+        ? `${preview.total_m3.toLocaleString('es-AR', { minimumFractionDigits: 3, maximumFractionDigits: 3 })} m3 calculados`
+        : undefined,
+    },
+    {
+      label: 'Preparacion',
+      amount: document.preparation_total,
+      detail: preview ? `${preview.total_orders.toLocaleString('es-AR')} pedido(s) preparados` : undefined,
+    },
+    {
+      label: 'Alta de producto',
+      amount: document.product_creation_total,
+      detail: preview?.product_creation_products?.length
+        ? preview.product_creation_products.join(', ')
+        : 'Sin altas en el periodo',
+    },
+    {
+      label: 'Primera impresion de etiqueta',
+      amount: document.label_print_total,
+      detail: preview?.label_print_count
+        ? `${preview.label_print_count.toLocaleString('es-AR')} etiqueta(s) cobradas por primera impresion`
+        : 'Sin primeras impresiones en el periodo',
+    },
+    {
+      label: 'Traslados a transporte',
+      amount: document.transport_dispatch_total,
+      detail: preview?.transport_dispatch_count
+        ? `${preview.transport_dispatch_count.toLocaleString('es-AR')} traslado(s)`
+        : 'Sin traslados en el periodo',
+    },
+    {
+      label: 'Descargas',
+      amount: document.truck_unloading_total,
+      detail: preview?.truck_unloading_count
+        ? `${preview.truck_unloading_count.toLocaleString('es-AR')} camion(es)`
+        : 'Sin descargas en el periodo',
+    },
+    {
+      label: 'Cargos manuales',
+      amount: document.manual_charge_total,
+      detail: preview?.manual_charge_items?.length
+        ? preview.manual_charge_items
+            .map((item) => `${item.descripcion || item.tipo || 'Cargo manual'}: ${formatCurrency(item.monto)}`)
+            .join(' | ')
+        : 'Sin cargos manuales en el periodo',
+    },
+    {
+      label: 'Envios',
+      amount: document.shipping_total,
+      detail: preview ? `Base del periodo ${formatCurrency(preview.shipping_base_amount)}` : undefined,
+    },
+  ].filter((line) => Math.abs(line.amount) > 0.00001);
+
+  const drawHeader = () => {
+    doc.setFillColor(17, 24, 39);
+    doc.roundedRect(margin, cursorY, contentWidth, 26, 3, 3, 'F');
+    doc.setTextColor(255, 255, 255);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(18);
+    doc.text('Remito mensual', margin + 4, cursorY + 10);
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(10);
+    doc.text(`Generado ${new Date().toLocaleString('es-AR')}`, margin + 4, cursorY + 18);
+    doc.text(`Periodo ${document.period}`, pageWidth - margin - 4, cursorY + 10, { align: 'right' });
+    doc.text(`Estado ${getBillingDocumentStatusLabel(document.status)}`, pageWidth - margin - 4, cursorY + 18, { align: 'right' });
+    doc.setTextColor(17, 24, 39);
+    cursorY += 34;
+  };
+
+  const ensureSpace = (requiredHeight: number) => {
+    if (cursorY + requiredHeight <= pageHeight - margin) return;
+    doc.addPage();
+    cursorY = margin;
+    drawHeader();
+  };
+
+  drawHeader();
+
+  doc.setDrawColor(226, 232, 240);
+  doc.roundedRect(margin, cursorY, contentWidth, 28, 2, 2, 'S');
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(12);
+  doc.text(document.client_name, margin + 4, cursorY + 8);
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(10);
+  doc.text(`Vencimiento: ${new Date(document.due_date).toLocaleDateString('es-AR')}`, margin + 4, cursorY + 16);
+  doc.text(`Remito #${document.id}`, margin + 4, cursorY + 22);
+  doc.setFont('helvetica', 'bold');
+  doc.text(`Total: ${formatCurrency(document.total)}`, pageWidth - margin - 4, cursorY + 16, { align: 'right' });
+  cursorY += 36;
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(11);
+  doc.text('Detalle del periodo', margin, cursorY);
+  cursorY += 7;
+
+  if (detailLines.length === 0) {
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(10);
+    doc.setTextColor(75, 85, 99);
+    doc.text('No hubo servicios facturables para este periodo.', margin, cursorY);
+    doc.setTextColor(17, 24, 39);
+    cursorY += 8;
+  }
+
+  detailLines.forEach((line) => {
+    const detailText = line.detail ? doc.splitTextToSize(line.detail, contentWidth - 58) : [];
+    const rowHeight = 14 + detailText.length * 4;
+    ensureSpace(rowHeight + 2);
+
+    doc.setDrawColor(229, 231, 235);
+    doc.roundedRect(margin, cursorY, contentWidth, rowHeight, 2, 2, 'S');
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(10);
+    doc.text(line.label, margin + 4, cursorY + 7);
+    doc.text(formatCurrency(line.amount), pageWidth - margin - 4, cursorY + 7, { align: 'right' });
+
+    if (detailText.length > 0) {
+      doc.setFont('helvetica', 'normal');
+      doc.setTextColor(75, 85, 99);
+      doc.text(detailText, margin + 4, cursorY + 15);
+      doc.setTextColor(17, 24, 39);
+    }
+
+    cursorY += rowHeight + 3;
+  });
+
+  ensureSpace(26);
+  doc.setFillColor(249, 250, 251);
+  doc.roundedRect(margin, cursorY, contentWidth, 18, 2, 2, 'F');
+  doc.setDrawColor(226, 232, 240);
+  doc.roundedRect(margin, cursorY, contentWidth, 18, 2, 2, 'S');
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(13);
+  doc.text('Total a pagar', margin + 4, cursorY + 11);
+  doc.text(formatCurrency(document.total), pageWidth - margin - 4, cursorY + 11, { align: 'right' });
+  cursorY += 24;
+
+  if (preview?.manual_charge_items?.length) {
+    ensureSpace(18);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(11);
+    doc.text('Observaciones del periodo', margin, cursorY);
+    cursorY += 7;
+
+    preview.manual_charge_items.forEach((item) => {
+      const note = `${new Date(item.fecha).toLocaleDateString('es-AR')} - ${item.descripcion || item.tipo || 'Cargo manual'}: ${formatCurrency(item.monto)}`;
+      const wrapped = doc.splitTextToSize(note, contentWidth - 8);
+      ensureSpace(8 + wrapped.length * 4);
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(9);
+      doc.text(wrapped, margin + 4, cursorY);
+      cursorY += wrapped.length * 4 + 3;
+    });
+  }
+
+  doc.save(buildFileName(`remito-${document.client_name.toLowerCase().replace(/[^a-z0-9]+/gi, '-')}-${document.period}`));
 }

@@ -10,6 +10,7 @@ class BillingRatesUpdate(BaseModel):
     preparation_base_fee: float = Field(ge=0, default=0)
     preparation_additional_fee: float = Field(ge=0, default=0)
     product_creation_fee: float = Field(ge=0, default=0)
+    label_print_fee: float = Field(ge=0, default=0)
     transport_dispatch_fee: float = Field(ge=0, default=0)
     truck_unloading_fee: float = Field(ge=0, default=0)
     shipping_base: float = Field(ge=0, default=0)
@@ -78,6 +79,8 @@ class BillingPreviewItem(BaseModel):
     preparation_amount: float
     product_creation_amount: float
     product_creation_products: list[str] = []
+    label_print_amount: float
+    label_print_count: int = 0
     transport_dispatch_amount: float
     transport_dispatch_count: int = 0
     transport_dispatch_transporters: list[str] = []
@@ -133,6 +136,7 @@ class ChargeResponse(BaseModel):
     storage_amount: float
     preparation_amount: float
     product_creation_amount: float
+    label_print_amount: float
     transport_dispatch_amount: float
     truck_unloading_amount: float
     manual_charge_amount: float
@@ -180,6 +184,7 @@ class BillingDocumentResponse(BaseModel):
     storage_total: float
     preparation_total: float
     product_creation_total: float
+    label_print_total: float
     transport_dispatch_total: float
     truck_unloading_total: float
     manual_charge_total: float

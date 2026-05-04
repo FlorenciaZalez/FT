@@ -258,3 +258,11 @@ async def delete_product(db: AsyncSession, product_id: int, user: User) -> None:
 
     await db.delete(product)
     await db.flush()
+
+
+async def record_first_label_print(db: AsyncSession, product_id: int, user: User) -> bool:
+    product = await get_product(db, product_id, user)
+
+    from app.billing.service import record_product_first_label_print
+
+    return await record_product_first_label_print(db, product)
