@@ -1008,7 +1008,6 @@ async def _refresh_document_statuses(db: AsyncSession) -> None:
 
 
 async def preview_charges(db: AsyncSession, user: User, period: str) -> list[dict]:
-    await _ensure_historical_billing_records(db)
     previews = await _build_preview_rows(db, period, user)
     return [
         {
