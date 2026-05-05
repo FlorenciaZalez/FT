@@ -472,7 +472,7 @@ export default function Billing() {
 
       <section className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
         <SummaryCard label={isClient ? 'Acumulado a abonar' : 'Total estimado'} value={formatCurrency(totals.total)} tone="blue" />
-        <SummaryCard label="Storage facturado" value={`${formatNumber(totals.totalM3, 3)} m3`} tone="emerald" />
+        <SummaryCard label="Storage actual" value={`${formatNumber(totals.totalM3, 3)} m3`} tone="emerald" />
         <SummaryCard label="Pedidos / remitos" value={`${formatNumber(totals.totalOrders, 0)} / ${formatNumber(documents.length, 0)}`} tone="amber" />
         <SummaryCard
           label={isClient ? 'Remitos emitidos' : 'Estado del período'}
@@ -604,7 +604,7 @@ export default function Billing() {
                     {
                       label: 'Storage',
                       amount: toFiniteNumber(item.storage_amount),
-                      detail: `${formatNumber(toFiniteNumber(item.total_m3), 3)} m3 facturados en el período · Base ${formatCurrency(toFiniteNumber(item.storage_base_rate))}`,
+                      detail: `${formatNumber(toFiniteNumber(item.total_m3), 3)} m3 actuales · Base ${formatCurrency(toFiniteNumber(item.storage_base_rate))} · Monto acumulado día a día en el período`,
                     },
                     {
                       label: 'Preparación',

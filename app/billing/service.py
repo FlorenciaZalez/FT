@@ -255,6 +255,29 @@ def _calculate_storage_amount_from_daily_volumes(
     return total.quantize(TWOPLACES, rounding=ROUND_HALF_UP)
 
 
+def _resolve_storage_volume(
+    volume_m3: Decimal | float | int | None,
+    width_cm: Decimal | float | int | None,
+    height_cm: Decimal | float | int | None,
+    depth_cm: Decimal | float | int | None,
+) -> Decimal:
+    resolved_volume = _to_decimal(volume_m3, FOURPLACES) if volume_m3 is not None else Decimal("0.0000")
+    if resolved_volume > Decimal("0.0000"):
+        return resolved_volume
+
+    dimensions = (width_cm, height_cm, depth_cm)
+    if any(value is None for value in dimensions):
+        return Decimal("0.0000")
+
+    width = _to_decimal(width_cm, TWOPLACES)
+    height = _to_decimal(height_cm, TWOPLACES)
+    depth = _to_decimal(depth_cm, TWOPLACES)
+    if width <= Decimal("0.00") or height <= Decimal("0.00") or depth <= Decimal("0.00"):
+        return Decimal("0.0000")
+
+    return _to_decimal((width * height * depth) / Decimal("1000000"), FOURPLACES)
+
+
 def _build_daily_storage_volumes(
     current_quantities: dict[int, int],
     movement_rows: list[dict],
@@ -313,19 +336,28 @@ async def _calculate_variable_storage_metrics(
             Stock.product_id,
             func.coalesce(func.sum(Stock.quantity_total), 0),
             Product.volume_m3,
+            Product.width_cm,
+            Product.height_cm,
+            Product.depth_cm,
         )
         .join(Product, Product.id == Stock.product_id)
         .where(Stock.client_id == client_id)
-        .group_by(Stock.product_id, Product.volume_m3)
+        .group_by(
+            Stock.product_id,
+            Product.volume_m3,
+            Product.width_cm,
+            Product.height_cm,
+            Product.depth_cm,
+        )
     )
 
     current_quantities: dict[int, int] = {}
     product_volumes: dict[int, Decimal] = {}
     missing_dimensions = False
 
-    for product_id, quantity_total, volume_m3 in quantity_rows.all():
+    for product_id, quantity_total, volume_m3, width_cm, height_cm, depth_cm in quantity_rows.all():
         resolved_quantity = int(quantity_total or 0)
-        resolved_volume = _to_decimal(volume_m3, FOURPLACES) if volume_m3 is not None else Decimal("0.0000")
+        resolved_volume = _resolve_storage_volume(volume_m3, width_cm, height_cm, depth_cm)
         current_quantities[product_id] = resolved_quantity
         product_volumes[product_id] = resolved_volume
         if resolved_quantity > 0 and resolved_volume <= Decimal("0.0000"):
@@ -337,6 +369,9 @@ async def _calculate_variable_storage_metrics(
             StockMovement.quantity,
             StockMovement.created_at,
             Product.volume_m3,
+            Product.width_cm,
+            Product.height_cm,
+            Product.depth_cm,
         )
         .join(Product, Product.id == StockMovement.product_id)
         .where(
@@ -349,8 +384,8 @@ async def _calculate_variable_storage_metrics(
     )
 
     movement_rows: list[dict] = []
-    for product_id, quantity, created_at, volume_m3 in movement_result.all():
-        resolved_volume = _to_decimal(volume_m3, FOURPLACES) if volume_m3 is not None else Decimal("0.0000")
+    for product_id, quantity, created_at, volume_m3, width_cm, height_cm, depth_cm in movement_result.all():
+        resolved_volume = _resolve_storage_volume(volume_m3, width_cm, height_cm, depth_cm)
         current_quantities.setdefault(product_id, 0)
         product_volumes[product_id] = resolved_volume
         if int(quantity or 0) != 0 and resolved_volume <= Decimal("0.0000"):
@@ -376,9 +411,9 @@ async def _calculate_variable_storage_metrics(
         start.date(),
         billable_end_day,
     )
-    billed_total_m3 = daily_volumes[-1] if daily_volumes else current_total_m3
-    storage_amount = _to_decimal(billed_total_m3 * storage_rate)
-    return billed_total_m3, storage_amount, False
+    days_in_month = monthrange(start.year, start.month)[1]
+    storage_amount = _calculate_storage_amount_from_daily_volumes(daily_volumes, storage_rate, days_in_month)
+    return current_total_m3, storage_amount, False
 
 
 def _serialize_product_creation_record(record: ProductCreationRecord, client_name: str | None = None) -> dict:

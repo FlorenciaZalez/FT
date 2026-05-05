@@ -1,3 +1,5 @@
+from decimal import Decimal, ROUND_HALF_UP
+
 from sqlalchemy import select, func, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
@@ -90,6 +92,25 @@ async def _record_movement(
     return movement
 
 
+def _product_has_resolvable_storage_volume(product: Product) -> bool:
+    if product.volume_m3 is not None and Decimal(str(product.volume_m3)) > Decimal("0"):
+        return True
+
+    dimensions = (product.width_cm, product.height_cm, product.depth_cm)
+    if any(value is None for value in dimensions):
+        return False
+
+    return all(Decimal(str(value)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP) > Decimal("0.00") for value in dimensions)
+
+
+def _ensure_product_storage_volume(product: Product) -> None:
+    if _product_has_resolvable_storage_volume(product):
+        return
+    raise BadRequestError(
+        "El producto no tiene m3 ni medidas completas. Cargá ancho, alto y profundidad antes de ingresar stock para que el storage se facture correctamente."
+    )
+
+
 # ──────────────────────────────────────────────
 #  INBOUND (Ingreso de mercadería)
 # ──────────────────────────────────────────────
@@ -105,6 +126,7 @@ async def inbound_stock(
     if product is None:
         raise NotFoundError(f"Product {product_id} not found")
     check_tenant_access(user, product.client_id)
+    _ensure_product_storage_volume(product)
 
     stock = await _get_or_create_stock(db, product.client_id, product_id, location_id)
     stock.quantity_total += quantity
@@ -143,6 +165,8 @@ async def adjust_stock(
         )
 
     diff = new_quantity - stock.quantity_total
+    if diff > 0:
+        _ensure_product_storage_volume(product)
     stock.quantity_total = new_quantity
 
     await _record_movement(
@@ -395,6 +419,7 @@ async def simple_inbound(
     if product is None:
         raise NotFoundError(f"Producto {product_id} no encontrado")
     check_tenant_access(user, product.client_id)
+    _ensure_product_storage_volume(product)
 
     location = await _get_default_location(db)
     stock = await _get_or_create_stock(db, product.client_id, product_id, location.id)
