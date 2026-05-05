@@ -41,6 +41,137 @@ async def _ensure_runtime_schema() -> None:
         await connection.execute(
             text(
                 """
+                DO $$
+                BEGIN
+                    IF NOT EXISTS (
+                        SELECT 1
+                        FROM pg_type
+                        WHERE typname = 'shippingcategory'
+                    ) THEN
+                        CREATE TYPE shippingcategory AS ENUM ('A', 'B', 'C');
+                    END IF;
+                END $$;
+                """
+            )
+        )
+        await connection.execute(
+            text(
+                """
+                ALTER TABLE clients
+                ADD COLUMN IF NOT EXISTS shipping_category shippingcategory
+                """
+            )
+        )
+        await connection.execute(
+            text(
+                """
+                UPDATE clients
+                SET shipping_category = 'A'::shippingcategory
+                WHERE shipping_category IS NULL
+                """
+            )
+        )
+        await connection.execute(
+            text(
+                """
+                ALTER TABLE clients
+                ALTER COLUMN shipping_category SET DEFAULT 'A'::shippingcategory
+                """
+            )
+        )
+        await connection.execute(
+            text(
+                """
+                ALTER TABLE shipping_rates
+                ADD COLUMN IF NOT EXISTS shipping_category shippingcategory
+                """
+            )
+        )
+        await connection.execute(
+            text(
+                """
+                UPDATE shipping_rates
+                SET shipping_category = 'A'::shippingcategory
+                WHERE shipping_category IS NULL
+                """
+            )
+        )
+        await connection.execute(
+            text(
+                """
+                ALTER TABLE shipping_rates
+                ALTER COLUMN shipping_category SET DEFAULT 'A'::shippingcategory
+                """
+            )
+        )
+        await connection.execute(
+            text(
+                """
+                DO $$
+                BEGIN
+                    IF EXISTS (
+                        SELECT 1
+                        FROM information_schema.table_constraints
+                        WHERE table_name = 'shipping_rates'
+                        AND constraint_name = 'uq_shipping_rates_cordon'
+                    ) THEN
+                        ALTER TABLE shipping_rates DROP CONSTRAINT uq_shipping_rates_cordon;
+                    END IF;
+                END $$;
+                """
+            )
+        )
+        await connection.execute(
+            text(
+                """
+                DO $$
+                BEGIN
+                    IF NOT EXISTS (
+                        SELECT 1
+                        FROM information_schema.table_constraints
+                        WHERE table_name = 'shipping_rates'
+                        AND constraint_name = 'uq_shipping_rates_category_cordon'
+                    ) THEN
+                        ALTER TABLE shipping_rates
+                        ADD CONSTRAINT uq_shipping_rates_category_cordon UNIQUE (shipping_category, cordon);
+                    END IF;
+                END $$;
+                """
+            )
+        )
+        await connection.execute(
+            text(
+                """
+                INSERT INTO shipping_rates (shipping_category, cordon, price, created_at, updated_at)
+                SELECT 'B'::shippingcategory, shipping_rates.cordon, shipping_rates.price, now(), now()
+                FROM shipping_rates
+                WHERE shipping_rates.shipping_category = 'A'::shippingcategory
+                AND NOT EXISTS (
+                    SELECT 1 FROM shipping_rates existing
+                    WHERE existing.shipping_category = 'B'::shippingcategory
+                    AND existing.cordon = shipping_rates.cordon
+                )
+                """
+            )
+        )
+        await connection.execute(
+            text(
+                """
+                INSERT INTO shipping_rates (shipping_category, cordon, price, created_at, updated_at)
+                SELECT 'C'::shippingcategory, shipping_rates.cordon, shipping_rates.price, now(), now()
+                FROM shipping_rates
+                WHERE shipping_rates.shipping_category = 'A'::shippingcategory
+                AND NOT EXISTS (
+                    SELECT 1 FROM shipping_rates existing
+                    WHERE existing.shipping_category = 'C'::shippingcategory
+                    AND existing.cordon = shipping_rates.cordon
+                )
+                """
+            )
+        )
+        await connection.execute(
+            text(
+                """
                 ALTER TABLE clients
                 ADD COLUMN IF NOT EXISTS variable_storage_enabled BOOLEAN NOT NULL DEFAULT TRUE
                 """
