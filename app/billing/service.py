@@ -767,17 +767,6 @@ async def _build_preview_rows(
         }
         for client_id, total_amount, total_count in label_print_rows.all()
     }
-    product_label_refs = [f"product:{product_id}" for product_id in client_ids]
-    existing_product_label_refs = set(
-        (
-            await db.execute(
-                select(LabelPrintRecord.order_number).where(
-                    LabelPrintRecord.label_type == "product",
-                    LabelPrintRecord.order_number.like("product:%"),
-                )
-            )
-        ).scalars().all()
-    )
     missing_label_print_rows = await db.execute(
         select(Product.client_id, Product.id)
         .where(
@@ -786,8 +775,22 @@ async def _build_preview_rows(
             Product.created_at < end,
         )
     )
+    period_product_rows = missing_label_print_rows.all()
+    product_label_refs = [_product_label_reference(product_id) for _, product_id in period_product_rows]
+    existing_product_label_refs = set()
+    if product_label_refs:
+        existing_product_label_refs = set(
+            (
+                await db.execute(
+                    select(LabelPrintRecord.order_number).where(
+                        LabelPrintRecord.label_type == "product",
+                        LabelPrintRecord.order_number.in_(product_label_refs),
+                    )
+                )
+            ).scalars().all()
+        )
     missing_label_print_count_by_client: dict[int, int] = {}
-    for label_client_id, product_id in missing_label_print_rows.all():
+    for label_client_id, product_id in period_product_rows:
         if f"product:{product_id}" in existing_product_label_refs:
             continue
         missing_label_print_count_by_client[label_client_id] = missing_label_print_count_by_client.get(label_client_id, 0) + 1
