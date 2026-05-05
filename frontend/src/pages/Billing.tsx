@@ -6,7 +6,6 @@ import { fetchClients, type Client } from '../services/clients';
 import {
   createManualCharge,
   deleteManualCharge,
-  fetchBillingAlerts,
   fetchBillingDocuments,
   fetchBillingPreview,
   fetchClientBillingRates,
@@ -17,7 +16,6 @@ import {
   markBillingDocumentPaid,
   updateClientBillingRates,
   updateGlobalBillingRates,
-  type BillingAlertSummary,
   type BillingDocument,
   type BillingPreviewItem,
   type ClientRate,
@@ -43,13 +41,6 @@ export default function Billing() {
   const [period, setPeriod] = useState(getCurrentPeriod());
   const [preview, setPreview] = useState<BillingPreviewItem[]>([]);
   const [documents, setDocuments] = useState<BillingDocument[]>([]);
-  const [alerts, setAlerts] = useState<BillingAlertSummary>({
-    due_soon_count: 0,
-    due_soon_days: 2,
-    overdue_count: 0,
-    due_soon_documents: [],
-    overdue_documents: [],
-  });
   const [clients, setClients] = useState<Client[]>([]);
   const [documentStatus, setDocumentStatus] = useState<DocumentStatusFilter>('all');
   const [documentClientId, setDocumentClientId] = useState('');
@@ -141,19 +132,17 @@ export default function Billing() {
     setError('');
     try {
       const documentClient = targetClientId ? Number(targetClientId) : undefined;
-      const [previewData, documentsData, alertsData] = await Promise.all([
+      const [previewData, documentsData] = await Promise.all([
         fetchBillingPreview(targetPeriod),
         fetchBillingDocuments({
           period: targetPeriod,
           client_id: documentClient,
           status: targetStatus === 'all' ? undefined : targetStatus,
         }),
-        fetchBillingAlerts(),
       ]);
 
       setPreview(previewData);
       setDocuments(documentsData);
-      setAlerts(alertsData);
 
       if (isAdmin) {
         const [ratesData, clientRatesData, clientsData, manualChargesData] = await Promise.all([
@@ -439,42 +428,6 @@ export default function Billing() {
       )}
 
       {successMessage && <SuccessToast message={successMessage} onClose={() => setSuccessMessage('')} />}
-
-      {((isAdmin && missingStorageItems.length > 0) || alerts.due_soon_count > 0 || alerts.overdue_count > 0) && (
-        <section className="rounded-2xl border border-yellow-200 bg-yellow-50 px-5 py-4 sm:px-6">
-          <div className="flex items-start gap-3">
-            <div className="text-xl leading-none">⚠</div>
-            <div className="flex-1">
-              <h2 className="text-base font-bold text-yellow-900">Alertas del período</h2>
-              <div className="mt-3 space-y-3 text-sm text-yellow-900">
-                {isAdmin && missingStorageItems.length > 0 && (
-                  <div>
-                    <p className="font-medium">Falta cargar ocupación manual para {missingStorageItems.length} cliente{missingStorageItems.length !== 1 ? 's' : ''}.</p>
-                    <div className="mt-2 flex flex-wrap gap-2">
-                      {missingStorageItems.map((item) => (
-                        <button
-                          key={item.client_id}
-                          type="button"
-                          onClick={() => navigate(`/clients/${item.client_id}`)}
-                          className="rounded-lg border border-yellow-200 bg-white px-3 py-1.5 text-sm font-medium text-yellow-900 hover:bg-yellow-100 transition"
-                        >
-                          {item.client_name}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
-                {alerts.due_soon_count > 0 && (
-                  <p>{alerts.due_soon_count} remito{alerts.due_soon_count !== 1 ? 's' : ''} vence{alerts.due_soon_count !== 1 ? 'n' : ''} en {alerts.due_soon_days} día{alerts.due_soon_days !== 1 ? 's' : ''}.</p>
-                )}
-                {alerts.overdue_count > 0 && (
-                  <p>{alerts.overdue_count} remito{alerts.overdue_count !== 1 ? 's' : ''} vencido{alerts.overdue_count !== 1 ? 's' : ''} requiere{alerts.overdue_count === 1 ? '' : 'n'} seguimiento.</p>
-                )}
-              </div>
-            </div>
-          </div>
-        </section>
-      )}
 
       <section className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
         <SummaryCard label={isClient ? 'Acumulado a abonar' : 'Total estimado'} value={formatCurrency(totals.total)} tone="blue" />

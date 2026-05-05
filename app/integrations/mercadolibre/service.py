@@ -335,6 +335,21 @@ def _coalesce_buyer_name(order_data: dict) -> str | None:
     return full_name or None
 
 
+def _normalize_order_item_payload(order_item: dict) -> dict | None:
+    item_data = order_item.get("item") or {}
+    raw_ml_item_id = item_data.get("id")
+    normalized_ml_item_id = normalize_ml_item_id(str(raw_ml_item_id) if raw_ml_item_id is not None else None)
+    if normalized_ml_item_id is None:
+        return None
+
+    variation_id = order_item.get("variation_id")
+    return {
+        "ml_item_id": normalized_ml_item_id,
+        "variation_id": str(variation_id) if variation_id is not None else None,
+        "quantity": max(int(order_item.get("quantity") or 1), 1),
+    }
+
+
 def _extract_shipping_address(order_data: dict) -> dict:
     shipping = order_data.get("shipping") or {}
     receiver = shipping.get("receiver_address") or {}
@@ -461,11 +476,12 @@ async def process_webhook_notification(db: AsyncSession, payload: dict) -> dict:
             "order_id": None,
         }
 
-    first_item = order_items[0]
-    first_item_data = first_item.get("item") or {}
-    raw_ml_item_id = first_item_data.get("id")
-    normalized_ml_item_id = normalize_ml_item_id(str(raw_ml_item_id) if raw_ml_item_id is not None else None)
-    if normalized_ml_item_id is None:
+    normalized_items = [
+        normalized_item
+        for order_item in order_items
+        if (normalized_item := _normalize_order_item_payload(order_item)) is not None
+    ]
+    if not normalized_items:
         return {
             "received": True,
             "processed": False,
@@ -473,32 +489,85 @@ async def process_webhook_notification(db: AsyncSession, payload: dict) -> dict:
             "detail": "No se encontro un ml_item_id valido en la orden",
             "order_id": None,
         }
-
-    quantity = int(first_item.get("quantity") or 1)
-    variation_id = first_item.get("variation_id")
     shipping_data = _extract_shipping_address(order_data)
 
     from app.orders import service as orders_service
 
+    aggregated_items_by_product: dict[int, dict] = {}
+    first_unmapped_item: dict | None = None
+    unmapped_items_count = 0
+
+    for normalized_item in normalized_items:
+        mapped_product = await resolve_ml_to_product(
+            db,
+            account.client_id,
+            normalized_item["ml_item_id"],
+            normalized_item["variation_id"],
+        )
+        if mapped_product is None:
+            unmapped_items_count += 1
+            if first_unmapped_item is None:
+              first_unmapped_item = normalized_item
+            continue
+
+        current_item = aggregated_items_by_product.get(mapped_product.id)
+        if current_item is None:
+            aggregated_items_by_product[mapped_product.id] = {
+                "product_id": mapped_product.id,
+                "quantity": normalized_item["quantity"],
+            }
+        else:
+            current_item["quantity"] += normalized_item["quantity"]
+
+    mapped_items_data = list(aggregated_items_by_product.values())
+    all_items_mapped = len(mapped_items_data) > 0 and first_unmapped_item is None
+
+    notes = "Creado automaticamente desde webhook de Mercado Libre"
+    if len(normalized_items) > 1:
+        notes = f"{notes}. Items detectados: {len(normalized_items)}"
+    if not all_items_mapped and first_unmapped_item is not None:
+        notes = (
+            f"{notes}. Quedo pendiente de mapeo automatico: "
+            f"{unmapped_items_count} item(s) sin mapping resuelto."
+        )
+
+    create_payload = {
+        "client_id": account.client_id,
+        "source": OrderSource.mercadolibre.value,
+        "external_id": str(order_data.get("id") or order_external_id),
+        "shipping_id": shipping_data["shipping_id"],
+        "buyer_name": _coalesce_buyer_name(order_data),
+        "address_line": shipping_data["address_line"],
+        "city": shipping_data["city"],
+        "state": shipping_data["state"],
+        "postal_code": shipping_data["postal_code"],
+        "address_reference": shipping_data["address_reference"],
+        "notes": notes,
+    }
+
+    if all_items_mapped:
+        if len(normalized_items) == 1:
+            create_payload.update(
+                {
+                    "ml_item_id": normalized_items[0]["ml_item_id"],
+                    "variation_id": normalized_items[0]["variation_id"],
+                    "quantity": normalized_items[0]["quantity"],
+                }
+            )
+        create_payload["items"] = mapped_items_data
+    else:
+        create_payload.update(
+            {
+                "ml_item_id": first_unmapped_item["ml_item_id"],
+                "variation_id": first_unmapped_item["variation_id"],
+                "quantity": first_unmapped_item["quantity"],
+            }
+        )
+
     created_order = await orders_service.create_order(
         db,
         webhook_actor,
-        {
-            "client_id": account.client_id,
-            "source": OrderSource.mercadolibre.value,
-            "external_id": str(order_data.get("id") or order_external_id),
-            "shipping_id": shipping_data["shipping_id"],
-            "ml_item_id": normalized_ml_item_id,
-            "variation_id": str(variation_id) if variation_id is not None else None,
-            "quantity": max(quantity, 1),
-            "buyer_name": _coalesce_buyer_name(order_data),
-            "address_line": shipping_data["address_line"],
-            "city": shipping_data["city"],
-            "state": shipping_data["state"],
-            "postal_code": shipping_data["postal_code"],
-            "address_reference": shipping_data["address_reference"],
-            "notes": "Creado automaticamente desde webhook de Mercado Libre",
-        },
+        create_payload,
     )
 
     return {
@@ -617,11 +686,14 @@ async def resolve_ml_to_product(
         MLProductMapping.ml_item_id == normalized_item_id,
         MLProductMapping.is_active.is_(True),
     )
-    if ml_variation_id:
-        query = query.where(MLProductMapping.ml_variation_id == ml_variation_id)
 
     result = await db.execute(query)
-    mapping = result.scalar_one_or_none()
+    mappings = list(result.scalars().all())
+    mapping = None
+    if ml_variation_id is not None:
+        mapping = next((item for item in mappings if item.ml_variation_id == ml_variation_id), None)
+    if mapping is None:
+        mapping = next((item for item in mappings if item.ml_variation_id is None), None)
     if mapping is None:
         return None
     return await db.get(Product, mapping.product_id)

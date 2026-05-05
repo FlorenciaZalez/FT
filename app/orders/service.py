@@ -1020,7 +1020,7 @@ async def create_order(
         ml_item_id=data.get("ml_item_id"),
         ml_variation_id=ml_variation_id,
         requested_quantity=data.get("quantity"),
-        mapping_status=MAPPING_STATUS_RESOLVED if source != OrderSource.mercadolibre else None,
+        mapping_status=MAPPING_STATUS_RESOLVED if source != OrderSource.mercadolibre or bool(items_data) else None,
         operation_type=OrderOperationType.sale,
         status=OrderStatus.pending,
         buyer_name=data.get("buyer_name"),
@@ -1248,9 +1248,7 @@ async def reconcile_unmapped_orders_for_mapping(
             Order.ml_item_id == mapping.ml_item_id,
         )
     )
-    if mapping.ml_variation_id is None:
-        query = query.where(Order.ml_variation_id.is_(None))
-    else:
+    if mapping.ml_variation_id is not None:
         query = query.where(Order.ml_variation_id == mapping.ml_variation_id)
 
     result = await db.execute(query.order_by(Order.created_at.asc()))
