@@ -152,8 +152,10 @@ export default function StockPage() {
     fetchProducts().then(setProducts).catch(() => {});
     if (!isClient) {
       fetchClients().then(setClients).catch(() => {});
+      fetchStockMovements().then(setMovements).catch(() => {});
+    } else {
+      setMovements([]);
     }
-    fetchStockMovements().then(setMovements).catch(() => {});
   }, [isClient]);
 
   useEffect(() => {
@@ -459,7 +461,7 @@ export default function StockPage() {
                 <th className="text-right px-6 py-3 font-medium text-gray-500">Reservado</th>
                 <th className="text-right px-6 py-3 font-medium text-gray-500">Disponible</th>
                 <th className="text-left px-6 py-3 font-medium text-gray-500">Estado</th>
-                <th className="text-left px-6 py-3 font-medium text-gray-500">Último movimiento</th>
+                {!isClient && <th className="text-left px-6 py-3 font-medium text-gray-500">Último movimiento</th>}
               </tr>
             </thead>
             <tbody>
@@ -512,11 +514,13 @@ export default function StockPage() {
                         {isZero ? 'Sin stock' : isLow ? 'Bajo' : 'Disponible'}
                       </span>
                     </td>
-                    <td className="px-6 py-4 text-gray-500 text-sm">
-                      {lastMovementByProduct.has(s.product_id)
-                        ? formatMovementDate(lastMovementByProduct.get(s.product_id)!)
-                        : 'Sin movimiento'}
-                    </td>
+                    {!isClient && (
+                      <td className="px-6 py-4 text-gray-500 text-sm">
+                        {lastMovementByProduct.has(s.product_id)
+                          ? formatMovementDate(lastMovementByProduct.get(s.product_id)!)
+                          : 'Sin movimiento'}
+                      </td>
+                    )}
                   </tr>
                 );
               })}
@@ -618,7 +622,7 @@ export default function StockPage() {
       )}
 
       {/* History Modal */}
-      {historyProductId !== null && historyProduct && (
+      {!isClient && historyProductId !== null && historyProduct && (
         <MovementHistoryModal
           product={historyProduct}
           clientName={clientMap.get(historyProduct.client_id) ?? '—'}
@@ -678,11 +682,13 @@ export default function StockPage() {
                   >
                     {isZero ? 'Sin stock' : isLow ? 'Stock bajo' : 'Disponible'}
                   </span>
-                  <span className="text-xs text-gray-500">
-                    Último mov: {lastMovementByProduct.has(selectedProductId)
-                      ? formatMovementDate(lastMovementByProduct.get(selectedProductId)!)
-                      : 'Sin movimiento'}
-                  </span>
+                  {!isClient && (
+                    <span className="text-xs text-gray-500">
+                      Último mov: {lastMovementByProduct.has(selectedProductId)
+                        ? formatMovementDate(lastMovementByProduct.get(selectedProductId)!)
+                        : 'Sin movimiento'}
+                    </span>
+                  )}
                 </div>
               </div>
 
@@ -703,12 +709,14 @@ export default function StockPage() {
                     </button>
                   </>
                 )}
-                <button
-                  onClick={() => { setSelectedProductId(null); setHistoryProductId(selectedProductId); }}
-                  className="flex-1 border border-gray-200 text-gray-900 px-4 py-2.5 rounded-lg text-sm font-medium hover:bg-gray-50 transition"
-                >
-                  Historial
-                </button>
+                {!isClient && (
+                  <button
+                    onClick={() => { setSelectedProductId(null); setHistoryProductId(selectedProductId); }}
+                    className="flex-1 border border-gray-200 text-gray-900 px-4 py-2.5 rounded-lg text-sm font-medium hover:bg-gray-50 transition"
+                  >
+                    Historial
+                  </button>
+                )}
               </div>
             </div>
           </div>

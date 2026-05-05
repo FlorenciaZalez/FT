@@ -470,7 +470,7 @@ export default function Dashboard() {
               })}
             </div>
 
-            <div className="grid min-w-0 gap-3 xl:grid-cols-[1.2fr_0.8fr_1fr]">
+            <div className={`grid min-w-0 gap-3 ${isClient ? 'xl:grid-cols-[1.2fr_0.8fr]' : 'xl:grid-cols-[1.2fr_0.8fr_1fr]'}`}>
               <div className="min-w-0 overflow-hidden rounded-xl border border-gray-200 bg-white p-4">
                 <div className="flex items-center justify-between gap-3">
                   <div>
@@ -530,37 +530,39 @@ export default function Dashboard() {
                 </div>
               </div>
 
-              <div className="min-w-0 overflow-hidden rounded-xl border border-gray-200 bg-white p-4">
-                <div className="flex items-center justify-between gap-3">
-                  <div>
-                    <p className="text-xs font-semibold uppercase tracking-[0.22em] text-gray-400">Actividad reciente</p>
-                    <p className="mt-1 text-sm text-gray-500">Últimos movimientos.</p>
-                  </div>
-                  <Activity size={16} className="text-gray-400" />
-                </div>
-
-                <div className="mt-4 max-h-[22rem] space-y-2.5 overflow-y-auto pr-1">
-                  {(clientSnapshot?.activity ?? []).length > 0 ? (clientSnapshot?.activity ?? []).map((item) => {
-                    const Icon = item.icon;
-                    return (
-                      <div key={item.id} className="flex min-w-0 flex-col items-start gap-2 rounded-xl bg-gray-50 px-3 py-2.5 sm:flex-row sm:items-center sm:gap-3">
-                        <span className={`flex h-9 w-9 items-center justify-center rounded-xl ${getToneClasses(item.tone)}`}>
-                          <Icon size={16} />
-                        </span>
-                        <div className="min-w-0 flex-1">
-                          <p className="truncate text-sm font-medium text-gray-900">{item.title}</p>
-                          <p className="truncate text-xs text-gray-500">{item.subtitle}</p>
-                        </div>
-                        <span className="self-end text-[11px] text-gray-400 sm:self-auto sm:shrink-0 sm:text-xs">{formatRelativeTime(item.createdAt)}</span>
-                      </div>
-                    );
-                  }) : (
-                    <div className="rounded-xl border border-dashed border-gray-200 bg-gray-50 px-4 py-6 text-center text-sm text-gray-500">
-                      Sin movimientos recientes.
+              {!isClient && (
+                <div className="min-w-0 overflow-hidden rounded-xl border border-gray-200 bg-white p-4">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-[0.22em] text-gray-400">Actividad reciente</p>
+                      <p className="mt-1 text-sm text-gray-500">Últimos movimientos.</p>
                     </div>
-                  )}
+                    <Activity size={16} className="text-gray-400" />
+                  </div>
+
+                  <div className="mt-4 max-h-[22rem] space-y-2.5 overflow-y-auto pr-1">
+                    {(clientSnapshot?.activity ?? []).length > 0 ? (clientSnapshot?.activity ?? []).map((item) => {
+                      const Icon = item.icon;
+                      return (
+                        <div key={item.id} className="flex min-w-0 flex-col items-start gap-2 rounded-xl bg-gray-50 px-3 py-2.5 sm:flex-row sm:items-center sm:gap-3">
+                          <span className={`flex h-9 w-9 items-center justify-center rounded-xl ${getToneClasses(item.tone)}`}>
+                            <Icon size={16} />
+                          </span>
+                          <div className="min-w-0 flex-1">
+                            <p className="truncate text-sm font-medium text-gray-900">{item.title}</p>
+                            <p className="truncate text-xs text-gray-500">{item.subtitle}</p>
+                          </div>
+                          <span className="self-end text-[11px] text-gray-400 sm:self-auto sm:shrink-0 sm:text-xs">{formatRelativeTime(item.createdAt)}</span>
+                        </div>
+                      );
+                    }) : (
+                      <div className="rounded-xl border border-dashed border-gray-200 bg-gray-50 px-4 py-6 text-center text-sm text-gray-500">
+                        Sin movimientos recientes.
+                      </div>
+                    )}
+                  </div>
                 </div>
-              </div>
+              )}
             </div>
 
             {clientError && (
