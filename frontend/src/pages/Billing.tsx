@@ -568,10 +568,10 @@ export default function Billing() {
                         <button
                           type="button"
                           onClick={() => handleDeleteManualCharge(charge.id).catch(() => {})}
-                          disabled={charge.is_locked || deletingManualChargeId === charge.id}
+                          disabled={deletingManualChargeId === charge.id}
                           className="px-3 py-1.5 text-xs font-medium text-red-700 bg-red-50 rounded-lg hover:bg-red-100 transition disabled:opacity-50"
                         >
-                          {deletingManualChargeId === charge.id ? 'Eliminando...' : charge.is_locked ? 'Período cerrado' : 'Eliminar'}
+                          {deletingManualChargeId === charge.id ? 'Eliminando...' : 'Eliminar'}
                         </button>
                       </td>
                     </tr>

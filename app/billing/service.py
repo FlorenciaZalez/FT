@@ -1792,9 +1792,6 @@ async def create_manual_charge(db: AsyncSession, data: dict) -> dict:
     if charge_date.strftime("%Y-%m") != period:
         raise BadRequestError("La fecha del cargo manual debe pertenecer al período seleccionado")
 
-    if await _is_period_closed_for_client(db, client.id, period):
-        raise BadRequestError("No se pueden agregar cargos manuales a un período ya cerrado")
-
     record = ManualCharge(
         client_id=client.id,
         monto=amount,
@@ -1813,8 +1810,6 @@ async def delete_manual_charge(db: AsyncSession, charge_id: int) -> None:
     record = await db.get(ManualCharge, charge_id)
     if record is None:
         raise NotFoundError(f"Manual charge {charge_id} not found")
-    if await _is_period_closed_for_client(db, record.client_id, record.periodo):
-        raise BadRequestError("No se puede eliminar un cargo manual de un período ya cerrado")
     await db.delete(record)
     await db.flush()
 
