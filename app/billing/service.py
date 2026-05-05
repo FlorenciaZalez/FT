@@ -28,7 +28,7 @@ from app.billing.models import (
 from app.clients.models import Client
 from app.common.exceptions import BadRequestError, NotFoundError
 from app.common.permissions import check_tenant_access
-from app.orders.models import OrderItem, OrderStatus
+from app.orders.models import Order, OrderItem, OrderStatus
 from app.products.models import Product
 from app.stock.models import Stock
 from app.stock.movement_models import MovementType, StockMovement
