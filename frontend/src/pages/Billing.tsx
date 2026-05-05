@@ -81,6 +81,7 @@ export default function Billing() {
   const [globalRatesSeenAt, setGlobalRatesSeenAt] = useState('');
   const [savingManualCharge, setSavingManualCharge] = useState(false);
   const [deletingManualChargeId, setDeletingManualChargeId] = useState<number | null>(null);
+  const [manualChargeError, setManualChargeError] = useState('');
   const [manualChargeForm, setManualChargeForm] = useState({
     client_id: '',
     monto: '',
@@ -342,12 +343,12 @@ export default function Billing() {
     const clientId = Number(manualChargeForm.client_id);
     const amount = Number(manualChargeForm.monto);
     if (!Number.isInteger(clientId) || clientId <= 0 || !Number.isFinite(amount) || amount === 0 || !manualChargeForm.fecha) {
-      setError('Completá cliente, fecha y un monto distinto de 0.');
+      setManualChargeError('Completá cliente, fecha y un monto distinto de 0.');
       return;
     }
 
     setSavingManualCharge(true);
-    setError('');
+    setManualChargeError('');
     try {
       await createManualCharge({
         client_id: clientId,
@@ -365,10 +366,11 @@ export default function Billing() {
         descripcion: '',
         fecha: new Date().toISOString().slice(0, 10),
       });
+      setManualChargeError('');
       setSuccessMessage('Cargo manual registrado.');
       await loadBillingData(period, documentStatus, documentClientId);
     } catch (err: unknown) {
-      setError(getApiErrorMessage(err, 'No se pudo guardar el cargo manual.'));
+      setManualChargeError(getApiErrorMessage(err, 'No se pudo guardar el cargo manual.'));
     } finally {
       setSavingManualCharge(false);
     }
@@ -529,7 +531,10 @@ export default function Billing() {
             </div>
             <button
               type="button"
-              onClick={() => setShowManualChargeModal(true)}
+              onClick={() => {
+                setManualChargeError('');
+                setShowManualChargeModal(true);
+              }}
               className="px-4 py-2.5 border border-gray-200 rounded-lg text-sm font-medium text-gray-900 hover:bg-gray-50 transition"
             >
               + Agregar cargo manual
@@ -877,9 +882,16 @@ export default function Billing() {
         <ManualChargeModal
           clients={clients}
           form={manualChargeForm}
+          error={manualChargeError}
           saving={savingManualCharge}
-          onClose={() => setShowManualChargeModal(false)}
-          onChange={(field, value) => setManualChargeForm((current) => ({ ...current, [field]: value }))}
+          onClose={() => {
+            setManualChargeError('');
+            setShowManualChargeModal(false);
+          }}
+          onChange={(field, value) => {
+            setManualChargeError('');
+            setManualChargeForm((current) => ({ ...current, [field]: value }));
+          }}
           onSubmit={handleCreateManualCharge}
         />
       )}
@@ -1106,6 +1118,7 @@ function ClientRatesModal({
 function ManualChargeModal({
   clients,
   form,
+  error,
   saving,
   onClose,
   onChange,
@@ -1119,6 +1132,7 @@ function ManualChargeModal({
     descripcion: string;
     fecha: string;
   };
+  error: string;
   saving: boolean;
   onClose: () => void;
   onChange: (field: 'client_id' | 'monto' | 'tipo' | 'descripcion' | 'fecha', value: string) => void;
@@ -1136,6 +1150,12 @@ function ManualChargeModal({
         </div>
 
         <form onSubmit={(event) => { onSubmit(event).catch(() => {}); }} className="px-6 py-6 space-y-4">
+          {error && (
+            <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+              {error}
+            </div>
+          )}
+
           <div>
             <label className="block text-sm font-medium text-gray-900 mb-1">Cliente</label>
             <select
