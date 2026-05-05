@@ -4,8 +4,8 @@ from typing import Literal
 from pydantic import BaseModel
 
 
-WeightCategory = Literal["light", "heavy"]
-PreparationType = Literal["simple", "especial"]
+WeightCategory = Literal["simple", "intermedio", "premium"]
+PreparationType = Literal["simple", "intermedio", "premium"]
 
 
 class ProductCreate(BaseModel):

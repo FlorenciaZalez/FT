@@ -1,7 +1,8 @@
 import api from '../api/api';
 
 export type ShippingCordon = 'cordon_1' | 'cordon_2' | 'cordon_3';
-export type ShippingWeightCategory = 'light' | 'heavy';
+export type ShippingCategory = 'A' | 'B' | 'C';
+export type ShippingWeightCategory = 'simple' | 'intermedio' | 'premium';
 
 export interface PostalCodeRange {
   id: number;
@@ -20,6 +21,7 @@ export interface PostalCodeRangePayload {
 
 export interface ShippingRate {
   id: number;
+  shipping_category: ShippingCategory;
   cordon: ShippingCordon;
   price: number;
   created_at: string;
@@ -27,6 +29,7 @@ export interface ShippingRate {
 }
 
 export interface ShippingRatePayload {
+  shipping_category: ShippingCategory;
   cordon: ShippingCordon;
   price: number;
 }

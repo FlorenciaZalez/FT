@@ -13,6 +13,7 @@ import {
   updateShippingRate,
   type HandlingRate,
   type PostalCodeRange,
+  type ShippingCategory,
   type ShippingCordon,
   type ShippingRate,
   type ShippingWeightCategory,
@@ -25,27 +26,37 @@ const CORDON_OPTIONS: Array<{ value: ShippingCordon; label: string }> = [
   { value: 'cordon_3', label: 'Cordón 3' },
 ];
 
-const WEIGHT_CATEGORY_OPTIONS: Array<{ value: ShippingWeightCategory; label: string }> = [
-  { value: 'light', label: 'Liviano' },
-  { value: 'heavy', label: 'Pesado' },
+const SHIPPING_CATEGORY_OPTIONS: Array<{ value: ShippingCategory; label: string }> = [
+  { value: 'A', label: 'Categoría A' },
+  { value: 'B', label: 'Categoría B' },
+  { value: 'C', label: 'Categoría C' },
 ];
+
+const WEIGHT_CATEGORY_OPTIONS: Array<{ value: ShippingWeightCategory; label: string }> = [
+  { value: 'simple', label: 'Simple' },
+  { value: 'intermedio', label: 'Intermedio' },
+  { value: 'premium', label: 'Premium' },
+];
+
+type ShippingDraft = Record<ShippingCategory, Record<ShippingCordon, string>>;
 
 function getCordonLabel(value: ShippingCordon): string {
   return CORDON_OPTIONS.find((option) => option.value === value)?.label ?? value;
 }
 
-function createEmptyShippingDraft(): Record<ShippingCordon, string> {
+function createEmptyShippingDraftByCategory(): ShippingDraft {
   return {
-    cordon_1: '',
-    cordon_2: '',
-    cordon_3: '',
+    A: { cordon_1: '', cordon_2: '', cordon_3: '' },
+    B: { cordon_1: '', cordon_2: '', cordon_3: '' },
+    C: { cordon_1: '', cordon_2: '', cordon_3: '' },
   };
 }
 
 function createEmptyHandlingDraft(): Record<ShippingWeightCategory, string> {
   return {
-    light: '',
-    heavy: '',
+    simple: '',
+    intermedio: '',
+    premium: '',
   };
 }
 
@@ -62,9 +73,8 @@ export default function ShippingRules() {
   const [successMessage, setSuccessMessage] = useState('');
   const [showRangeModal, setShowRangeModal] = useState(false);
   const [editingRange, setEditingRange] = useState<PostalCodeRange | null>(null);
-
   const [rangeSearch, setRangeSearch] = useState('');
-  const [shippingDraft, setShippingDraft] = useState<Record<ShippingCordon, string>>(createEmptyShippingDraft);
+  const [shippingDraft, setShippingDraft] = useState<ShippingDraft>(createEmptyShippingDraftByCategory);
   const [handlingDraft, setHandlingDraft] = useState<Record<ShippingWeightCategory, string>>(createEmptyHandlingDraft);
 
   const loadData = async () => {
@@ -79,14 +89,21 @@ export default function ShippingRules() {
       setRanges(rangesData);
       setShippingRates(shippingRatesData);
       setHandlingRates(handlingRatesData);
-      setShippingDraft({
-        cordon_1: shippingRatesData.find((item) => item.cordon === 'cordon_1')?.price.toString() ?? '',
-        cordon_2: shippingRatesData.find((item) => item.cordon === 'cordon_2')?.price.toString() ?? '',
-        cordon_3: shippingRatesData.find((item) => item.cordon === 'cordon_3')?.price.toString() ?? '',
-      });
+
+      const nextShippingDraft = createEmptyShippingDraftByCategory();
+      for (const category of SHIPPING_CATEGORY_OPTIONS) {
+        for (const cordon of CORDON_OPTIONS) {
+          nextShippingDraft[category.value][cordon.value] = shippingRatesData.find(
+            (item) => item.shipping_category === category.value && item.cordon === cordon.value,
+          )?.price.toString() ?? '';
+        }
+      }
+      setShippingDraft(nextShippingDraft);
+
       setHandlingDraft({
-        light: handlingRatesData.find((item) => item.weight_category === 'light')?.price.toString() ?? '',
-        heavy: handlingRatesData.find((item) => item.weight_category === 'heavy')?.price.toString() ?? '',
+        simple: handlingRatesData.find((item) => item.weight_category === 'simple')?.price.toString() ?? '',
+        intermedio: handlingRatesData.find((item) => item.weight_category === 'intermedio')?.price.toString() ?? '',
+        premium: handlingRatesData.find((item) => item.weight_category === 'premium')?.price.toString() ?? '',
       });
     } catch {
       setError('No se pudieron cargar las reglas logísticas.');
@@ -103,13 +120,15 @@ export default function ShippingRules() {
   const filteredRanges = useMemo(() => {
     const q = rangeSearch.trim().toLowerCase();
     if (!q) return ranges;
-    return ranges.filter((item) => getCordonLabel(item.cordon).toLowerCase().includes(q) || String(item.cp_from).includes(q) || String(item.cp_to).includes(q));
+    return ranges.filter(
+      (item) => getCordonLabel(item.cordon).toLowerCase().includes(q) || String(item.cp_from).includes(q) || String(item.cp_to).includes(q),
+    );
   }, [ranges, rangeSearch]);
 
-  const shippingRatesByCordon = useMemo(() => {
-    const mapped = new Map<ShippingCordon, ShippingRate>();
+  const shippingRatesByCategoryAndCordon = useMemo(() => {
+    const mapped = new Map<string, ShippingRate>();
     for (const rate of shippingRates) {
-      mapped.set(rate.cordon, rate);
+      mapped.set(`${rate.shipping_category}:${rate.cordon}`, rate);
     }
     return mapped;
   }, [shippingRates]);
@@ -122,9 +141,11 @@ export default function ShippingRules() {
     return mapped;
   }, [handlingRates]);
 
-  const missingShippingCordons = useMemo(
-    () => CORDON_OPTIONS.filter((option) => !shippingRatesByCordon.has(option.value)),
-    [shippingRatesByCordon],
+  const missingShippingRates = useMemo(
+    () => SHIPPING_CATEGORY_OPTIONS.flatMap((category) => CORDON_OPTIONS
+      .filter((cordon) => !shippingRatesByCategoryAndCordon.has(`${category.value}:${cordon.value}`))
+      .map((cordon) => `${category.label} / ${cordon.label}`)),
+    [shippingRatesByCategoryAndCordon],
   );
 
   const missingHandlingCategories = useMemo(
@@ -145,10 +166,11 @@ export default function ShippingRules() {
   };
 
   const handleSaveConfiguration = async () => {
-    const shippingPayload = CORDON_OPTIONS.map((option) => ({
+    const shippingPayload = SHIPPING_CATEGORY_OPTIONS.flatMap((category) => CORDON_OPTIONS.map((option) => ({
+      shipping_category: category.value,
       cordon: option.value,
-      price: shippingDraft[option.value],
-    }));
+      price: shippingDraft[category.value][option.value],
+    })));
     const handlingPayload = WEIGHT_CATEGORY_OPTIONS.map((option) => ({
       weight_category: option.value,
       price: handlingDraft[option.value],
@@ -157,7 +179,7 @@ export default function ShippingRules() {
     const hasMissingShipping = shippingPayload.some((item) => item.price.trim() === '');
     const hasMissingHandling = handlingPayload.some((item) => item.price.trim() === '');
     if (hasMissingShipping || hasMissingHandling) {
-      setError('Completá las 3 tarifas de envío y las 2 tarifas de preparación antes de guardar.');
+      setError('Completá las 9 tarifas de envío por categoría y cordón, y las 3 tarifas de preparación antes de guardar.');
       return;
     }
 
@@ -176,11 +198,11 @@ export default function ShippingRules() {
     try {
       await Promise.all([
         ...normalizedShipping.map((item) => {
-          const existing = shippingRatesByCordon.get(item.cordon);
+          const existing = shippingRatesByCategoryAndCordon.get(`${item.shipping_category}:${item.cordon}`);
           if (existing) {
             return updateShippingRate(existing.id, { price: item.value });
           }
-          return createShippingRate({ cordon: item.cordon, price: item.value });
+          return createShippingRate({ shipping_category: item.shipping_category, cordon: item.cordon, price: item.value });
         }),
         ...normalizedHandling.map((item) => {
           const existing = handlingRatesByCategory.get(item.weight_category);
@@ -215,7 +237,7 @@ export default function ShippingRules() {
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Tarifas de envío</h1>
           <p className="text-sm text-gray-500 mt-1">
-            Configurá el costo logístico separando envío por cordón y preparación por categoría de peso.
+            Configurá el costo logístico separando envío por categoría de cliente y cordón, más preparación por categoría de peso.
           </p>
         </div>
         <div className="flex flex-col gap-3 sm:flex-row">
@@ -239,11 +261,11 @@ export default function ShippingRules() {
         <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg p-3">{error}</div>
       )}
 
-      {(missingShippingCordons.length > 0 || missingHandlingCategories.length > 0) && !loading && (
+      {(missingShippingRates.length > 0 || missingHandlingCategories.length > 0) && !loading && (
         <div className="bg-yellow-50 border border-yellow-200 text-yellow-800 text-sm rounded-lg p-4">
           <div className="font-semibold">Faltan tarifas clave para completar la configuración.</div>
-          {missingShippingCordons.length > 0 && (
-            <div className="mt-1">Envío sin tarifa: {missingShippingCordons.map((item) => item.label).join(', ')}.</div>
+          {missingShippingRates.length > 0 && (
+            <div className="mt-1">Envío sin tarifa: {missingShippingRates.join(', ')}.</div>
           )}
           {missingHandlingCategories.length > 0 && (
             <div className="mt-1">Preparación sin tarifa: {missingHandlingCategories.map((item) => item.label).join(', ')}.</div>
@@ -255,42 +277,52 @@ export default function ShippingRules() {
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <SummaryCard label="Rangos configurados" value={String(ranges.length)} tone="blue" />
-        <SummaryCard label="Envío configurado" value={`${shippingRates.length} / 3`} tone="emerald" />
-        <SummaryCard label="Preparación configurada" value={`${handlingRates.length} / 2`} tone="amber" />
+        <SummaryCard label="Envío configurado" value={`${shippingRates.length} / 9`} tone="emerald" />
+        <SummaryCard label="Preparación configurada" value={`${handlingRates.length} / 3`} tone="amber" />
       </div>
 
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
         <section className="bg-white rounded-xl border border-gray-200 overflow-hidden">
           <div className="px-6 py-4 border-b border-gray-200">
             <h2 className="text-lg font-bold text-gray-900">Tarifas de envío</h2>
-            <p className="text-sm text-gray-500 mt-1">Cada cordón tiene un único costo base de envío.</p>
+            <p className="text-sm text-gray-500 mt-1">Cada categoría de cliente tiene su costo base por cordón.</p>
           </div>
           <div className="p-6">
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[420px] text-sm">
+              <table className="w-full min-w-[620px] text-sm">
                 <thead>
                   <tr className="border-b border-gray-200 text-left text-gray-500">
-                    <th className="pb-3 font-medium">Cordón</th>
-                    <th className="pb-3 font-medium text-right">Precio de envío</th>
+                    <th className="pb-3 font-medium">Categoría</th>
+                    {CORDON_OPTIONS.map((option) => (
+                      <th key={option.value} className="pb-3 font-medium text-right">{option.label}</th>
+                    ))}
                   </tr>
                 </thead>
                 <tbody>
-                  {CORDON_OPTIONS.map((option) => (
-                    <tr key={option.value} className="border-b border-gray-200 last:border-b-0">
-                      <td className="py-4 font-medium text-gray-900">{option.label}</td>
-                      <td className="py-4">
-                        <div className="flex justify-end">
-                          <input
-                            type="number"
-                            min={0}
-                            step="0.01"
-                            value={shippingDraft[option.value]}
-                            onChange={(e) => setShippingDraft((current) => ({ ...current, [option.value]: e.target.value }))}
-                            className="w-40 px-4 py-2.5 border border-gray-200 rounded-lg text-right"
-                            placeholder="0.00"
-                          />
-                        </div>
-                      </td>
+                  {SHIPPING_CATEGORY_OPTIONS.map((category) => (
+                    <tr key={category.value} className="border-b border-gray-200 last:border-b-0">
+                      <td className="py-4 font-medium text-gray-900">{category.label}</td>
+                      {CORDON_OPTIONS.map((option) => (
+                        <td key={option.value} className="py-4">
+                          <div className="flex justify-end">
+                            <input
+                              type="number"
+                              min={0}
+                              step="0.01"
+                              value={shippingDraft[category.value][option.value]}
+                              onChange={(e) => setShippingDraft((current) => ({
+                                ...current,
+                                [category.value]: {
+                                  ...current[category.value],
+                                  [option.value]: e.target.value,
+                                },
+                              }))}
+                              className="w-28 px-4 py-2.5 border border-gray-200 rounded-lg text-right"
+                              placeholder="0.00"
+                            />
+                          </div>
+                        </td>
+                      ))}
                     </tr>
                   ))}
                 </tbody>
@@ -337,7 +369,7 @@ export default function ShippingRules() {
             </div>
 
             <div className="mt-4 rounded-lg border border-gray-200 bg-gray-50 p-4 text-sm text-gray-900">
-              Total calculado por pedido = envío por cordón + preparación por categoría de peso.
+              Total calculado por pedido = envío por categoría y cordón + preparación por categoría de peso.
             </div>
           </div>
         </section>

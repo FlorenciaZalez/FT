@@ -23,6 +23,7 @@ export interface Client {
   plan: string;
   is_active: boolean;
   variable_storage_enabled: boolean;
+  shipping_category: 'A' | 'B' | 'C';
   created_at: string;
   updated_at: string;
   ml_account: MLAccountInfo | null;
@@ -40,6 +41,7 @@ export interface ClientCreatePayload {
   plan?: string;
   billing_day_of_month?: number;
   variable_storage_enabled?: boolean;
+  shipping_category?: 'A' | 'B' | 'C';
 }
 
 export interface ClientUpdatePayload {
@@ -54,6 +56,7 @@ export interface ClientUpdatePayload {
   is_active?: boolean;
   billing_day_of_month?: number;
   variable_storage_enabled?: boolean;
+  shipping_category?: 'A' | 'B' | 'C';
 }
 
 export async function fetchClients(limit = 1000): Promise<Client[]> {

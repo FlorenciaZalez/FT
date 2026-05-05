@@ -10,9 +10,12 @@ from app.products.schemas import ProductCreate, ProductUpdate, ProductResponse
 
 def _get_preparation_type(product) -> str:
     preparation_type = getattr(product, "preparation_type", None)
-    if preparation_type in {"simple", "especial"}:
+    if preparation_type in {"simple", "intermedio", "premium"}:
         return preparation_type
-    return "especial" if getattr(product, "weight_category", None) == "heavy" else "simple"
+    weight_category = getattr(product, "weight_category", None)
+    if weight_category in {"premium", "intermedio", "simple"}:
+        return weight_category
+    return "intermedio" if weight_category == "heavy" else "simple"
 
 router = APIRouter(prefix="/products", tags=["Products"])
 

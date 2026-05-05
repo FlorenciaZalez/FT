@@ -8,6 +8,12 @@ const PLAN_OPTIONS = [
   { value: 'enterprise', label: 'Enterprise' },
 ];
 
+const SHIPPING_CATEGORY_OPTIONS = [
+  { value: 'A', label: 'Categoría A' },
+  { value: 'B', label: 'Categoría B' },
+  { value: 'C', label: 'Categoría C' },
+] as const;
+
 export default function ClientEdit() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -26,6 +32,7 @@ export default function ClientEdit() {
   const [contactPhone, setContactPhone] = useState('');
   const [plan, setPlan] = useState('basic');
   const [storageMode, setStorageMode] = useState<'fixed' | 'variable'>('fixed');
+  const [shippingCategory, setShippingCategory] = useState<'A' | 'B' | 'C'>('A');
 
   useEffect(() => {
     if (!id) return;
@@ -40,6 +47,7 @@ export default function ClientEdit() {
         setContactPhone(data.contact_phone ?? '');
         setPlan(data.plan);
         setStorageMode(data.variable_storage_enabled ? 'variable' : 'fixed');
+        setShippingCategory(data.shipping_category ?? 'A');
       })
       .catch(() => setError('Error al cargar el cliente'))
       .finally(() => setLoading(false));
@@ -61,6 +69,7 @@ export default function ClientEdit() {
       contact_phone: contactPhone || undefined,
       plan,
       variable_storage_enabled: storageMode === 'variable',
+      shipping_category: shippingCategory,
     };
 
     try {
@@ -189,6 +198,19 @@ export default function ClientEdit() {
                 <option key={o.value} value={o.value}>
                   {o.label}
                 </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-900 mb-1">Categoría de envío</label>
+            <select
+              value={shippingCategory}
+              onChange={(e) => setShippingCategory(e.target.value as 'A' | 'B' | 'C')}
+              className="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none bg-white transition"
+            >
+              {SHIPPING_CATEGORY_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>{option.label}</option>
               ))}
             </select>
           </div>

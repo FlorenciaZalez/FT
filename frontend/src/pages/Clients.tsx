@@ -9,6 +9,11 @@ import type { Client, ClientCreatePayload, ClientUpdatePayload } from '../servic
 type StatusFilter = 'all' | 'active' | 'inactive';
 
 const BILLING_DAY_OPTIONS = Array.from({ length: 31 }, (_, index) => index + 1);
+const SHIPPING_CATEGORY_OPTIONS = [
+  { value: 'A', label: 'Categoría A' },
+  { value: 'B', label: 'Categoría B' },
+  { value: 'C', label: 'Categoría C' },
+] as const;
 
 function getApiErrorMessage(error: unknown, fallback: string): string {
   const detail = (error as { response?: { data?: { detail?: unknown } } })?.response?.data?.detail;
@@ -346,6 +351,7 @@ function EditClientModal({
     String(client.billing_schedule?.day_of_month ?? 5),
   );
   const [variableStorageEnabled, setVariableStorageEnabled] = useState(client.variable_storage_enabled ?? false);
+  const [shippingCategory, setShippingCategory] = useState<'A' | 'B' | 'C'>(client.shipping_category ?? 'A');
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState('');
 
@@ -365,6 +371,7 @@ function EditClientModal({
         plan,
         billing_day_of_month: Number(billingDayOfMonth),
         variable_storage_enabled: variableStorageEnabled,
+        shipping_category: shippingCategory,
       });
       onSaved();
     } catch (err: unknown) {
@@ -426,6 +433,19 @@ function EditClientModal({
               <p className="text-xs text-gray-500 mt-1">Separado del teléfono principal para la operatoria diaria.</p>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+
+                      <div>
+                        <label className="block text-sm font-medium text-gray-900 mb-1">Categoría de envío</label>
+                        <select
+                          value={shippingCategory}
+                          onChange={(e) => setShippingCategory(e.target.value as 'A' | 'B' | 'C')}
+                          className="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none bg-white"
+                        >
+                          {SHIPPING_CATEGORY_OPTIONS.map((option) => (
+                            <option key={option.value} value={option.value}>{option.label}</option>
+                          ))}
+                        </select>
+                      </div>
               <div>
                 <label className="block text-sm font-medium text-gray-900 mb-1">Nombre del contacto</label>
                 <input type="text" value={contactName} onChange={(e) => setContactName(e.target.value)}
@@ -511,6 +531,7 @@ function CreateClientForm({
   const [contactPhoneOperational, setContactPhoneOperational] = useState('');
   const [billingDayOfMonth, setBillingDayOfMonth] = useState('5');
   const [storageMode, setStorageMode] = useState<'fixed' | 'variable'>('fixed');
+  const [shippingCategory, setShippingCategory] = useState<'A' | 'B' | 'C'>('A');
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState('');
 
@@ -529,6 +550,7 @@ function CreateClientForm({
         contact_phone_operational: contactPhoneOperational || undefined,
         billing_day_of_month: Number(billingDayOfMonth),
         variable_storage_enabled: storageMode === 'variable',
+        shipping_category: shippingCategory,
       });
       onCreated();
     } catch (err: unknown) {
@@ -611,6 +633,18 @@ function CreateClientForm({
               <option key={day} value={day}>
                 Día {day}
               </option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-900 mb-1">Categoría de envío</label>
+          <select
+            value={shippingCategory}
+            onChange={(e) => setShippingCategory(e.target.value as 'A' | 'B' | 'C')}
+            className="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none bg-white"
+          >
+            {SHIPPING_CATEGORY_OPTIONS.map((option) => (
+              <option key={option.value} value={option.value}>{option.label}</option>
             ))}
           </select>
         </div>

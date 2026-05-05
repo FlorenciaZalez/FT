@@ -64,7 +64,8 @@ function calculateVolumePreview(widthCm: string, heightCm: string, depthCm: stri
 const LOW_STOCK_THRESHOLD = 5;
 const PREPARATION_TYPE_OPTIONS: Array<{ value: ProductPreparationType; label: string }> = [
   { value: 'simple', label: 'Preparación simple' },
-  { value: 'especial', label: 'Preparación especial' },
+  { value: 'intermedio', label: 'Preparación intermedia' },
+  { value: 'premium', label: 'Preparación premium' },
 ];
 
 export default function Products() {

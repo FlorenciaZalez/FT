@@ -14,9 +14,22 @@ class ShippingCordon(str, enum.Enum):
     cordon_3 = "cordon_3"
 
 
+class ShippingCategory(str, enum.Enum):
+    A = "A"
+    B = "B"
+    C = "C"
+
+
 SHIPPING_CORDON_ENUM = Enum(
     ShippingCordon,
     name="shippingcordon",
+    values_callable=lambda enum_type: [member.value for member in enum_type],
+)
+
+
+SHIPPING_CATEGORY_ENUM = Enum(
+    ShippingCategory,
+    name="shippingcategory",
     values_callable=lambda enum_type: [member.value for member in enum_type],
 )
 
@@ -49,10 +62,11 @@ class PostalCodeRange(Base):
 class ShippingRate(Base):
     __tablename__ = "shipping_rates"
     __table_args__ = (
-        UniqueConstraint("cordon", name="uq_shipping_rates_cordon"),
+        UniqueConstraint("shipping_category", "cordon", name="uq_shipping_rates_category_cordon"),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
+    shipping_category: Mapped[ShippingCategory] = mapped_column(SHIPPING_CATEGORY_ENUM, nullable=False, index=True)
     cordon: Mapped[ShippingCordon] = mapped_column(SHIPPING_CORDON_ENUM, nullable=False, index=True)
     price: Mapped[float] = mapped_column(Numeric(12, 2), nullable=False)
     created_at: Mapped[datetime] = mapped_column(

@@ -240,6 +240,7 @@ export default function ClientDetail() {
         <InfoCard label="Teléfono operativo" value={client.contact_phone_operational || '—'} />
         <InfoCard label="Día de cobro" value={client.billing_schedule?.active ? `Día ${client.billing_schedule.day_of_month}` : '—'} />
         <InfoCard label="Almacenamiento" value={client.variable_storage_enabled ? 'Variable por stock' : 'Fijo mensual'} />
+        <InfoCard label="Categoría de envío" value={`Categoría ${client.shipping_category ?? 'A'}`} />
         <InfoCard label="Cliente desde" value={new Date(client.created_at).toLocaleDateString('es-AR')} />
       </div>
 

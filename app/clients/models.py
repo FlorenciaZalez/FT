@@ -3,6 +3,7 @@ from datetime import datetime
 from sqlalchemy import String, Boolean, DateTime, Enum, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.database import Base
+from app.shipping.models import SHIPPING_CATEGORY_ENUM, ShippingCategory
 
 
 class PlanType(str, enum.Enum):
@@ -27,6 +28,12 @@ class Client(Base):
     )
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     variable_storage_enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False, server_default="true")
+    shipping_category: Mapped[ShippingCategory] = mapped_column(
+        SHIPPING_CATEGORY_ENUM,
+        default=ShippingCategory.A,
+        nullable=False,
+        server_default="A",
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )

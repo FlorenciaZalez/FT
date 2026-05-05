@@ -6,8 +6,9 @@ from app.database import Base
 
 
 class ProductWeightCategory(str, enum.Enum):
-    light = "light"
-    heavy = "heavy"
+    simple = "simple"
+    intermedio = "intermedio"
+    premium = "premium"
 
 
 PRODUCT_WEIGHT_CATEGORY_ENUM = Enum(
@@ -35,8 +36,8 @@ class Product(Base):
     weight_category: Mapped[ProductWeightCategory] = mapped_column(
         PRODUCT_WEIGHT_CATEGORY_ENUM,
         nullable=False,
-        default=ProductWeightCategory.light,
-        server_default=ProductWeightCategory.light.value,
+        default=ProductWeightCategory.simple,
+        server_default=ProductWeightCategory.simple.value,
         index=True,
     )
     width_cm: Mapped[float | None] = mapped_column(Numeric(10, 2))

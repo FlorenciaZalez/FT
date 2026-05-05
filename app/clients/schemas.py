@@ -13,6 +13,7 @@ class ClientCreate(BaseModel):
     plan: str = "basic"
     billing_day_of_month: int | None = Field(default=None, ge=1, le=31)
     variable_storage_enabled: bool = True
+    shipping_category: str = Field(default="A", pattern=r"^[ABC]$")
 
 
 class ClientUpdate(BaseModel):
@@ -27,6 +28,7 @@ class ClientUpdate(BaseModel):
     is_active: bool | None = None
     billing_day_of_month: int | None = Field(default=None, ge=1, le=31)
     variable_storage_enabled: bool | None = None
+    shipping_category: str | None = Field(default=None, pattern=r"^[ABC]$")
 
 
 class BillingScheduleInfo(BaseModel):
@@ -58,6 +60,7 @@ class ClientResponse(BaseModel):
     plan: str
     is_active: bool
     variable_storage_enabled: bool = True
+    shipping_category: str = "A"
     created_at: datetime
     updated_at: datetime
     ml_account: MLAccountInfo | None = None

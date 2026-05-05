@@ -21,11 +21,15 @@ _DIMENSION_FIELDS = ("width_cm", "height_cm", "depth_cm")
 
 
 def _map_preparation_type_to_weight_category(preparation_type: str) -> ProductWeightCategory:
-    return ProductWeightCategory.heavy if preparation_type == "especial" else ProductWeightCategory.light
+    if preparation_type == "premium":
+        return ProductWeightCategory.premium
+    if preparation_type == "intermedio":
+        return ProductWeightCategory.intermedio
+    return ProductWeightCategory.simple
 
 
 def _map_weight_category_to_preparation_type(weight_category: ProductWeightCategory) -> str:
-    return "especial" if weight_category == ProductWeightCategory.heavy else "simple"
+    return weight_category.value
 
 
 def _normalize_product_weight_category(

@@ -1,7 +1,7 @@
 import api from '../api/api';
 
-export type ProductWeightCategory = 'light' | 'heavy';
-export type ProductPreparationType = 'simple' | 'especial';
+export type ProductWeightCategory = 'simple' | 'intermedio' | 'premium';
+export type ProductPreparationType = 'simple' | 'intermedio' | 'premium';
 
 export interface Product {
   id: number;

@@ -5,7 +5,8 @@ from pydantic import BaseModel, Field
 
 
 ShippingCordonValue = Literal["cordon_1", "cordon_2", "cordon_3"]
-WeightCategoryValue = Literal["light", "heavy"]
+ShippingCategoryValue = Literal["A", "B", "C"]
+WeightCategoryValue = Literal["simple", "intermedio", "premium"]
 
 
 class PostalCodeRangeBase(BaseModel):
@@ -34,6 +35,7 @@ class PostalCodeRangeResponse(PostalCodeRangeBase):
 
 
 class ShippingRateBase(BaseModel):
+    shipping_category: ShippingCategoryValue
     cordon: ShippingCordonValue
     price: float = Field(ge=0)
 
@@ -43,6 +45,7 @@ class ShippingRateCreate(ShippingRateBase):
 
 
 class ShippingRateUpdate(BaseModel):
+    shipping_category: ShippingCategoryValue | None = None
     cordon: ShippingCordonValue | None = None
     price: float | None = Field(default=None, ge=0)
 

@@ -6,10 +6,11 @@ from typing import Sequence
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.clients.models import Client
 from app.common.exceptions import BadRequestError, ConflictError, NotFoundError
 from app.orders.models import Order, OrderItem
 from app.products.models import Product, ProductWeightCategory
-from app.shipping.models import HandlingRate, PostalCodeRange, ShippingCordon, ShippingRate
+from app.shipping.models import HandlingRate, PostalCodeRange, ShippingCategory, ShippingCordon, ShippingRate
 
 SHIPPING_STATUS_CALCULATED = "calculated"
 SHIPPING_STATUS_ZONE_UNDEFINED = "zone_undefined"
@@ -44,11 +45,12 @@ async def get_product_by_sku(db: AsyncSession, client_id: int, sku: str) -> Prod
 
 async def get_shipping_rate(
     db: AsyncSession,
+    shipping_category: ShippingCategory,
     cordon: ShippingCordon,
 ) -> ShippingRate | None:
     result = await db.execute(
         select(ShippingRate)
-        .where(ShippingRate.cordon == cordon)
+        .where(ShippingRate.shipping_category == shipping_category, ShippingRate.cordon == cordon)
         .limit(1)
     )
     return result.scalar_one_or_none()
@@ -71,15 +73,18 @@ async def _resolve_order_weight_category(
     items: Sequence[OrderItem],
     products_by_id: dict[int, Product] | None = None,
 ) -> ProductWeightCategory:
+    resolved_category = ProductWeightCategory.simple
     for item in items:
         product = products_by_id.get(item.product_id) if products_by_id is not None else None
         if product is None:
             product = await db.get(Product, item.product_id)
         if product is None:
             raise NotFoundError(f"Product {item.product_id} not found")
-        if product.weight_category == ProductWeightCategory.heavy:
-            return ProductWeightCategory.heavy
-    return ProductWeightCategory.light
+        if product.weight_category == ProductWeightCategory.premium:
+            return ProductWeightCategory.premium
+        if product.weight_category == ProductWeightCategory.intermedio:
+            resolved_category = ProductWeightCategory.intermedio
+    return resolved_category
 
 
 async def calculate_shipping(
@@ -102,7 +107,10 @@ async def calculate_shipping(
         order.shipping_status = SHIPPING_STATUS_ZONE_UNDEFINED
         return {"status": SHIPPING_STATUS_ZONE_UNDEFINED, "cordon": None, "shipping_cost": None}
 
-    shipping_rate = await get_shipping_rate(db, cordon)
+    client = await db.get(Client, order.client_id)
+    shipping_category = client.shipping_category if client is not None else ShippingCategory.A
+
+    shipping_rate = await get_shipping_rate(db, shipping_category, cordon)
     order.cordon = cordon.value
     if shipping_rate is None:
         order.shipping_cost = None
@@ -170,16 +178,19 @@ async def delete_postal_code_range(db: AsyncSession, range_id: int) -> None:
 
 
 async def list_shipping_rates(db: AsyncSession) -> list[ShippingRate]:
-    result = await db.execute(select(ShippingRate).order_by(ShippingRate.cordon.asc()))
+    result = await db.execute(select(ShippingRate).order_by(ShippingRate.shipping_category.asc(), ShippingRate.cordon.asc()))
     return list(result.scalars().all())
 
 
 async def create_shipping_rate(db: AsyncSession, data: dict) -> ShippingRate:
     existing = await db.execute(
-        select(ShippingRate).where(ShippingRate.cordon == data["cordon"])
+        select(ShippingRate).where(
+            ShippingRate.shipping_category == data["shipping_category"],
+            ShippingRate.cordon == data["cordon"],
+        )
     )
     if existing.scalar_one_or_none() is not None:
-        raise ConflictError("Ya existe una tarifa de envío para ese cordón")
+        raise ConflictError("Ya existe una tarifa de envío para esa categoría y cordón")
     item = ShippingRate(**data)
     db.add(item)
     await db.flush()
@@ -191,15 +202,17 @@ async def update_shipping_rate(db: AsyncSession, rate_id: int, data: dict) -> Sh
     item = await db.get(ShippingRate, rate_id)
     if item is None:
         raise NotFoundError(f"Shipping rate {rate_id} not found")
+    next_category = data.get("shipping_category", item.shipping_category)
     next_cordon = data.get("cordon", item.cordon)
     existing = await db.execute(
         select(ShippingRate).where(
+            ShippingRate.shipping_category == next_category,
             ShippingRate.cordon == next_cordon,
             ShippingRate.id != rate_id,
         )
     )
     if existing.scalar_one_or_none() is not None:
-        raise ConflictError("Ya existe una tarifa de envío para ese cordón")
+        raise ConflictError("Ya existe una tarifa de envío para esa categoría y cordón")
     for key, value in data.items():
         setattr(item, key, value)
     await db.flush()
