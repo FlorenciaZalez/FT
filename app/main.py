@@ -55,6 +55,69 @@ async def _ensure_runtime_schema() -> None:
                 """
             )
         )
+        await connection.execute(
+            text(
+                """
+                ALTER TABLE billing_rates
+                ADD COLUMN IF NOT EXISTS label_print_fee NUMERIC(12, 2) NOT NULL DEFAULT 0
+                """
+            )
+        )
+        await connection.execute(
+            text(
+                """
+                ALTER TABLE charges
+                ADD COLUMN IF NOT EXISTS label_print_amount NUMERIC(14, 2) NOT NULL DEFAULT 0
+                """
+            )
+        )
+        await connection.execute(
+            text(
+                """
+                ALTER TABLE billing_documents
+                ADD COLUMN IF NOT EXISTS label_print_total NUMERIC(14, 2) NOT NULL DEFAULT 0
+                """
+            )
+        )
+        await connection.execute(
+            text(
+                """
+                CREATE TABLE IF NOT EXISTS label_print_records (
+                    id SERIAL PRIMARY KEY,
+                    client_id INTEGER NOT NULL REFERENCES clients(id) ON DELETE CASCADE,
+                    order_id INTEGER NULL REFERENCES orders(id) ON DELETE SET NULL,
+                    order_number VARCHAR(100) NOT NULL,
+                    label_type VARCHAR(20),
+                    price_applied NUMERIC(12, 2) NOT NULL DEFAULT 0,
+                    printed_at TIMESTAMPTZ NOT NULL DEFAULT now()
+                )
+                """
+            )
+        )
+        await connection.execute(
+            text(
+                """
+                CREATE INDEX IF NOT EXISTS ix_label_print_records_client_id
+                ON label_print_records (client_id)
+                """
+            )
+        )
+        await connection.execute(
+            text(
+                """
+                CREATE INDEX IF NOT EXISTS ix_label_print_records_order_id
+                ON label_print_records (order_id)
+                """
+            )
+        )
+        await connection.execute(
+            text(
+                """
+                CREATE INDEX IF NOT EXISTS ix_label_print_records_printed_at
+                ON label_print_records (printed_at)
+                """
+            )
+        )
 
 
 def _format_validation_error(exc: RequestValidationError) -> str:
