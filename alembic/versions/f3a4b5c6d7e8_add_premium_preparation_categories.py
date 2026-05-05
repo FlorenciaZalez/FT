@@ -25,6 +25,14 @@ NEW_PRODUCT_WEIGHT_CATEGORY = postgresql.ENUM("simple", "intermedio", "premium",
 def upgrade() -> None:
     bind = op.get_bind()
 
+    op.alter_column(
+        "products",
+        "weight_category",
+        existing_type=OLD_PRODUCT_WEIGHT_CATEGORY,
+        server_default=None,
+        existing_nullable=False,
+    )
+
     op.execute("ALTER TYPE productweightcategory RENAME TO productweightcategory_old")
     NEW_PRODUCT_WEIGHT_CATEGORY.create(bind, checkfirst=False)
 
@@ -98,6 +106,14 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     bind = op.get_bind()
+
+    op.alter_column(
+        "products",
+        "weight_category",
+        existing_type=NEW_PRODUCT_WEIGHT_CATEGORY,
+        server_default=None,
+        existing_nullable=False,
+    )
 
     op.execute("DELETE FROM handling_rates WHERE weight_category = 'premium'::productweightcategory")
     op.execute(
