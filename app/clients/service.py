@@ -1,4 +1,4 @@
-from sqlalchemy import select, func, cast, String
+from sqlalchemy import select, func, cast, String, literal, text
 from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -47,6 +47,10 @@ async def _upsert_billing_schedule(db: AsyncSession, client: Client, day_of_mont
 
 
 def _client_base_query():
+    return _client_base_query_with_shipping_category(include_shipping_category=True)
+
+
+def _client_base_query_with_shipping_category(include_shipping_category: bool):
     return select(
         Client.id,
         Client.name,
@@ -59,10 +63,30 @@ def _client_base_query():
         cast(Client.__table__.c.plan, String).label("plan"),
         Client.is_active,
         func.coalesce(Client.variable_storage_enabled, False).label("variable_storage_enabled"),
-        cast(Client.__table__.c.shipping_category, String).label("shipping_category"),
+        (
+            cast(Client.__table__.c.shipping_category, String)
+            if include_shipping_category
+            else literal("A")
+        ).label("shipping_category"),
         Client.created_at,
         Client.updated_at,
     )
+
+
+async def _has_shipping_category_column(db: AsyncSession) -> bool:
+    result = await db.execute(
+        text(
+            """
+            SELECT EXISTS (
+                SELECT 1
+                FROM information_schema.columns
+                WHERE table_name = 'clients'
+                  AND column_name = 'shipping_category'
+            )
+            """
+        )
+    )
+    return bool(result.scalar())
 
 
 async def _attach_client_relations(db: AsyncSession, rows: list[dict]) -> list[dict]:
@@ -117,13 +141,21 @@ async def list_clients(db: AsyncSession, user=None, skip: int = 0, limit: int = 
     total_q = await db.execute(select(func.count()).select_from(base_ids_query.subquery()))
     total = total_q.scalar_one()
 
-    query = _scope_client_query(_client_base_query().order_by(Client.id), user).offset(skip).limit(limit)
+    has_shipping_category_column = await _has_shipping_category_column(db)
+    query = _scope_client_query(
+        _client_base_query_with_shipping_category(has_shipping_category_column).order_by(Client.id),
+        user,
+    ).offset(skip).limit(limit)
     result = await db.execute(query)
     return await _attach_client_relations(db, result.mappings().all()), total
 
 
 async def get_client(db: AsyncSession, client_id: int, user=None) -> dict:
-    query = _scope_client_query(_client_base_query().where(Client.id == client_id), user)
+    has_shipping_category_column = await _has_shipping_category_column(db)
+    query = _scope_client_query(
+        _client_base_query_with_shipping_category(has_shipping_category_column).where(Client.id == client_id),
+        user,
+    )
     result = await db.execute(query)
     row = result.mappings().one_or_none()
     if row is None:

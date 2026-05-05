@@ -1,9 +1,10 @@
 from decimal import Decimal, ROUND_HALF_UP
 
-from sqlalchemy import select, func
+from sqlalchemy import select, func, cast, String
 from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.clients.models import Client
 from app.products.models import Product, ProductWeightCategory
 from app.stock.models import Stock
 from app.orders.models import OrderItem
@@ -92,6 +93,71 @@ def _product_with_relations() -> select:
     )
 
 
+def _normalize_product_read_category(value: str | None) -> str:
+    if value in {"simple", "intermedio", "premium"}:
+        return value
+    if value in {"heavy", "especial"}:
+        return "intermedio"
+    return "simple"
+
+
+def _product_read_query() -> select:
+    return select(
+        Product.id,
+        Product.client_id,
+        Client.name.label("client_name"),
+        Product.name,
+        Product.sku,
+        Product.barcode,
+        Product.description,
+        Product.weight_kg,
+        cast(Product.__table__.c.preparation_type, String).label("preparation_type"),
+        cast(Product.__table__.c.weight_category, String).label("weight_category"),
+        Product.alta_cobrada,
+        Product.width_cm,
+        Product.height_cm,
+        Product.depth_cm,
+        Product.volume_m3,
+        Product.image_url,
+        Product.location_id,
+        WarehouseLocation.code.label("location_code"),
+        Product.is_active,
+        Product.created_at,
+        Product.updated_at,
+    ).select_from(Product).join(Client, Client.id == Product.client_id).outerjoin(WarehouseLocation, WarehouseLocation.id == Product.location_id)
+
+
+async def _attach_product_relations(db: AsyncSession, rows: list[dict]) -> list[dict]:
+    if not rows:
+        return []
+
+    product_ids = [int(row["id"]) for row in rows]
+    mappings_result = await db.execute(
+        select(MLProductMapping.product_id, MLProductMapping.ml_item_id).where(
+            MLProductMapping.product_id.in_(product_ids),
+            MLProductMapping.is_active.is_(True),
+            MLProductMapping.ml_variation_id.is_(None),
+        )
+    )
+
+    mappings_by_product: dict[int, set[str]] = {}
+    for product_id, ml_item_id in mappings_result.all():
+        mappings_by_product.setdefault(product_id, set()).add(ml_item_id)
+
+    payloads: list[dict] = []
+    for row in rows:
+        payload = dict(row)
+        ml_item_ids = sorted(mappings_by_product.get(int(payload["id"]), set()))
+        normalized_weight_category = _normalize_product_read_category(payload.get("weight_category"))
+        payload["weight_category"] = normalized_weight_category
+        payload["preparation_type"] = _normalize_product_read_category(payload.get("preparation_type") or normalized_weight_category)
+        payload["has_ml_mapping"] = bool(ml_item_ids)
+        payload["ml_item_id"] = ml_item_ids[0] if ml_item_ids else None
+        payload["ml_item_ids"] = ml_item_ids
+        payloads.append(payload)
+    return payloads
+
+
 async def _load_direct_ml_mappings(db: AsyncSession, product_id: int) -> list[MLProductMapping]:
     result = await db.execute(
         select(MLProductMapping).where(
@@ -149,10 +215,10 @@ async def _validate_location(db: AsyncSession, location_id: int | None) -> None:
 
 async def list_products(
     db: AsyncSession, user: User, skip: int = 0, limit: int = 50
-) -> tuple[list[Product], int]:
+) -> tuple[list[dict], int]:
     base = select(Product)
     base = tenant_filter(base, Product, user)
-    data_query = tenant_filter(_product_with_relations(), Product, user)
+    data_query = tenant_filter(_product_read_query(), Product, user)
 
     count_q = await db.execute(select(func.count()).select_from(base.subquery()))
     total = count_q.scalar_one()
@@ -160,10 +226,20 @@ async def list_products(
     result = await db.execute(
         data_query.order_by(Product.id).offset(skip).limit(limit)
     )
-    return result.scalars().all(), total
+    return await _attach_product_relations(db, result.mappings().all()), total
 
 
-async def get_product(db: AsyncSession, product_id: int, user: User) -> Product:
+async def get_product(db: AsyncSession, product_id: int, user: User) -> dict:
+    query = tenant_filter(_product_read_query().where(Product.id == product_id), Product, user)
+    result = await db.execute(query)
+    row = result.mappings().one_or_none()
+    if row is None:
+        raise NotFoundError(f"Product {product_id} not found")
+    payloads = await _attach_product_relations(db, [row])
+    return payloads[0]
+
+
+async def _get_product_model(db: AsyncSession, product_id: int, user: User) -> Product:
     result = await db.execute(_product_with_relations().where(Product.id == product_id))
     product = result.scalar_one_or_none()
     if product is None:
@@ -216,7 +292,7 @@ async def create_product(db: AsyncSession, user: User, data: dict) -> Product:
 
 
 async def update_product(db: AsyncSession, product_id: int, user: User, data: dict) -> Product:
-    product = await get_product(db, product_id, user)
+    product = await _get_product_model(db, product_id, user)
     ml_item_reference = data.pop("ml_item_reference", _ML_REFERENCE_UNSET)
     _normalize_product_weight_category(data, product.weight_category, getattr(product, "preparation_type", None))
     _normalize_product_volume(data, product)
@@ -245,7 +321,7 @@ async def update_product(db: AsyncSession, product_id: int, user: User, data: di
 
 
 async def delete_product(db: AsyncSession, product_id: int, user: User) -> None:
-    product = await get_product(db, product_id, user)
+    product = await _get_product_model(db, product_id, user)
 
     stock_count = (await db.execute(
         select(func.count(Stock.id)).where(Stock.product_id == product_id)
@@ -265,7 +341,7 @@ async def delete_product(db: AsyncSession, product_id: int, user: User) -> None:
 
 
 async def record_first_label_print(db: AsyncSession, product_id: int, user: User) -> bool:
-    product = await get_product(db, product_id, user)
+    product = await _get_product_model(db, product_id, user)
 
     from app.billing.service import record_product_first_label_print
 

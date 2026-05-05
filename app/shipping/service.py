@@ -3,7 +3,7 @@ from __future__ import annotations
 import re
 from typing import Sequence
 
-from sqlalchemy import select
+from sqlalchemy import select, cast, String, literal, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.clients.models import Client
@@ -48,12 +48,28 @@ async def get_shipping_rate(
     shipping_category: ShippingCategory,
     cordon: ShippingCordon,
 ) -> ShippingRate | None:
-    result = await db.execute(
-        select(ShippingRate)
-        .where(ShippingRate.shipping_category == shipping_category, ShippingRate.cordon == cordon)
-        .limit(1)
-    )
+    has_shipping_category_column = await _has_shipping_category_column(db)
+    statement = select(ShippingRate).where(ShippingRate.cordon == cordon).limit(1)
+    if has_shipping_category_column:
+        statement = statement.where(ShippingRate.shipping_category == shipping_category)
+    result = await db.execute(statement)
     return result.scalar_one_or_none()
+
+
+async def _has_shipping_category_column(db: AsyncSession) -> bool:
+    result = await db.execute(
+        text(
+            """
+            SELECT EXISTS (
+                SELECT 1
+                FROM information_schema.columns
+                WHERE table_name = 'shipping_rates'
+                  AND column_name = 'shipping_category'
+            )
+            """
+        )
+    )
+    return bool(result.scalar())
 
 
 async def get_handling_rate(
@@ -177,20 +193,41 @@ async def delete_postal_code_range(db: AsyncSession, range_id: int) -> None:
     await db.flush()
 
 
-async def list_shipping_rates(db: AsyncSession) -> list[ShippingRate]:
-    result = await db.execute(select(ShippingRate).order_by(ShippingRate.shipping_category.asc(), ShippingRate.cordon.asc()))
-    return list(result.scalars().all())
+async def list_shipping_rates(db: AsyncSession) -> list[ShippingRate] | list[dict]:
+    has_shipping_category_column = await _has_shipping_category_column(db)
+    if has_shipping_category_column:
+        result = await db.execute(select(ShippingRate).order_by(ShippingRate.shipping_category.asc(), ShippingRate.cordon.asc()))
+        return list(result.scalars().all())
+
+    result = await db.execute(
+        select(
+            ShippingRate.id,
+            literal("A").label("shipping_category"),
+            cast(ShippingRate.__table__.c.cordon, String).label("cordon"),
+            ShippingRate.price,
+            ShippingRate.created_at,
+            ShippingRate.updated_at,
+        ).order_by(ShippingRate.cordon.asc())
+    )
+    return [dict(row) for row in result.mappings().all()]
 
 
 async def create_shipping_rate(db: AsyncSession, data: dict) -> ShippingRate:
-    existing = await db.execute(
-        select(ShippingRate).where(
-            ShippingRate.shipping_category == data["shipping_category"],
-            ShippingRate.cordon == data["cordon"],
-        )
-    )
+    has_shipping_category_column = await _has_shipping_category_column(db)
+    if not has_shipping_category_column:
+        data = {key: value for key, value in data.items() if key != "shipping_category"}
+
+    existing_statement = select(ShippingRate).where(ShippingRate.cordon == data["cordon"])
+    if has_shipping_category_column:
+        existing_statement = existing_statement.where(ShippingRate.shipping_category == data["shipping_category"])
+
+    existing = await db.execute(existing_statement)
     if existing.scalar_one_or_none() is not None:
-        raise ConflictError("Ya existe una tarifa de envío para esa categoría y cordón")
+        raise ConflictError(
+            "Ya existe una tarifa de envío para esa categoría y cordón"
+            if has_shipping_category_column
+            else "Ya existe una tarifa de envío para ese cordón"
+        )
     item = ShippingRate(**data)
     db.add(item)
     await db.flush()
@@ -202,17 +239,25 @@ async def update_shipping_rate(db: AsyncSession, rate_id: int, data: dict) -> Sh
     item = await db.get(ShippingRate, rate_id)
     if item is None:
         raise NotFoundError(f"Shipping rate {rate_id} not found")
-    next_category = data.get("shipping_category", item.shipping_category)
+    has_shipping_category_column = await _has_shipping_category_column(db)
+    if not has_shipping_category_column:
+        data = {key: value for key, value in data.items() if key != "shipping_category"}
+    next_category = data.get("shipping_category", item.shipping_category) if has_shipping_category_column else None
     next_cordon = data.get("cordon", item.cordon)
-    existing = await db.execute(
-        select(ShippingRate).where(
-            ShippingRate.shipping_category == next_category,
-            ShippingRate.cordon == next_cordon,
-            ShippingRate.id != rate_id,
-        )
+    existing_statement = select(ShippingRate).where(
+        ShippingRate.cordon == next_cordon,
+        ShippingRate.id != rate_id,
     )
+    if has_shipping_category_column:
+        existing_statement = existing_statement.where(ShippingRate.shipping_category == next_category)
+
+    existing = await db.execute(existing_statement)
     if existing.scalar_one_or_none() is not None:
-        raise ConflictError("Ya existe una tarifa de envío para esa categoría y cordón")
+        raise ConflictError(
+            "Ya existe una tarifa de envío para esa categoría y cordón"
+            if has_shipping_category_column
+            else "Ya existe una tarifa de envío para ese cordón"
+        )
     for key, value in data.items():
         setattr(item, key, value)
     await db.flush()
