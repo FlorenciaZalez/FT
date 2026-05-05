@@ -681,7 +681,7 @@ export default function Billing() {
                                 event.stopPropagation();
                                 handleGenerateSingleDocument(item.client_id).catch(() => {});
                               }}
-                              disabled={item.missing_storage || generatingClientId === item.client_id}
+                              disabled={generatingClientId === item.client_id}
                               className="px-3 py-1.5 text-xs font-medium text-blue-700 bg-blue-50 rounded-lg hover:bg-blue-100 transition disabled:opacity-50"
                             >
                               {generatingClientId === item.client_id ? 'Generando...' : 'Generar remito'}
