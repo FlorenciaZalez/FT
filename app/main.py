@@ -42,7 +42,7 @@ async def _ensure_runtime_schema() -> None:
             text(
                 """
                 ALTER TABLE clients
-                ADD COLUMN IF NOT EXISTS variable_storage_enabled BOOLEAN NOT NULL DEFAULT FALSE
+                ADD COLUMN IF NOT EXISTS variable_storage_enabled BOOLEAN NOT NULL DEFAULT TRUE
                 """
             )
         )
@@ -50,8 +50,16 @@ async def _ensure_runtime_schema() -> None:
             text(
                 """
                 UPDATE clients
-                SET variable_storage_enabled = FALSE
+                SET variable_storage_enabled = TRUE
                 WHERE variable_storage_enabled IS NULL
+                """
+            )
+        )
+        await connection.execute(
+            text(
+                """
+                ALTER TABLE clients
+                ALTER COLUMN variable_storage_enabled SET DEFAULT TRUE
                 """
             )
         )

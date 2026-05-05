@@ -903,7 +903,7 @@ async def _build_preview_rows(
         shipping_discount_pct = _to_decimal(override.shipping_discount_pct if override and override.shipping_discount_pct is not None else 0)
         shipping_multiplier = _discount_multiplier(shipping_discount_pct)
 
-        if client.variable_storage_enabled:
+        if client.variable_storage_enabled or client.id not in storage_map:
             total_m3, storage_amount, missing_storage = await _calculate_variable_storage_metrics(
                 db,
                 client.id,
@@ -912,9 +912,9 @@ async def _build_preview_rows(
             )
         else:
             storage_record = storage_map.get(client.id)
-            missing_storage = storage_record is None
             total_m3 = _to_decimal(storage_record.storage_m3 if storage_record else 0, THREEPLACES)
             storage_amount = _to_decimal(total_m3 * storage_rate)
+            missing_storage = False
 
         order_metrics = order_metrics_by_client.get(client.id, {"total_orders": 0, "shipping_source_amount": Decimal("0.00")})
         total_orders = int(order_metrics["total_orders"])

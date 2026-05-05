@@ -102,7 +102,7 @@ async def _attach_client_relations(db: AsyncSession, rows: list[dict]) -> list[d
         payload = dict(row)
         payload["plan"] = payload.get("plan") or "basic"
         payload["is_active"] = bool(payload.get("is_active", True))
-        payload["variable_storage_enabled"] = bool(payload.get("variable_storage_enabled", False))
+        payload["variable_storage_enabled"] = bool(payload.get("variable_storage_enabled", True))
         payload["billing_schedule"] = billing_schedule_map.get(payload["id"])
         payload["ml_account"] = ml_account_map.get(payload["id"])
         payloads.append(payload)

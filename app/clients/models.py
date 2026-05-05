@@ -26,7 +26,7 @@ class Client(Base):
         Enum(PlanType), default=PlanType.basic, nullable=False
     )
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
-    variable_storage_enabled: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False, server_default="false")
+    variable_storage_enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False, server_default="true")
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
