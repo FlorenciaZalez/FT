@@ -2,6 +2,28 @@ import { jsPDF } from 'jspdf';
 import type { BillingDocument, BillingPreviewItem, Charge } from '../services/billing';
 import { formatCurrency, getChargeStatusLabel } from './billingFormat';
 
+const TROD_PHONE = '+54 9 11 2397 5685';
+const TROD_ADDRESS = 'Jose Ignacio de la Rosa 5934, Mataderos, Buenos Aires';
+
+async function loadImageAsDataUrl(imagePath: string): Promise<string | null> {
+  try {
+    const response = await fetch(imagePath);
+    if (!response.ok) {
+      return null;
+    }
+
+    const blob = await response.blob();
+    return await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => resolve(typeof reader.result === 'string' ? reader.result : null);
+      reader.onerror = () => reject(reader.error ?? new Error('No se pudo leer el logo.'));
+      reader.readAsDataURL(blob);
+    });
+  } catch {
+    return null;
+  }
+}
+
 function getBillingDocumentStatusLabel(status: BillingDocument['status']): string {
   switch (status) {
     case 'paid':
@@ -95,13 +117,14 @@ type BillingRemitoLine = {
   detail?: string;
 };
 
-export function downloadBillingDocumentPdf(document: BillingDocument, preview?: BillingPreviewItem): void {
+export async function downloadBillingDocumentPdf(document: BillingDocument, preview?: BillingPreviewItem): Promise<void> {
   const doc = new jsPDF({ unit: 'mm', format: 'a4' });
   const pageWidth = doc.internal.pageSize.getWidth();
   const pageHeight = doc.internal.pageSize.getHeight();
   const margin = 14;
   const contentWidth = pageWidth - margin * 2;
   let cursorY = margin;
+  const logoDataUrl = await loadImageAsDataUrl('/logo.png');
 
   const detailLines: BillingRemitoLine[] = [
     {
@@ -161,19 +184,36 @@ export function downloadBillingDocumentPdf(document: BillingDocument, preview?: 
   ].filter((line) => Math.abs(line.amount) > 0.00001);
 
   const drawHeader = () => {
-    doc.setFillColor(17, 24, 39);
-    doc.roundedRect(margin, cursorY, contentWidth, 26, 3, 3, 'F');
-    doc.setTextColor(255, 255, 255);
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(18);
-    doc.text('Remito mensual', margin + 4, cursorY + 10);
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(10);
-    doc.text(`Generado ${new Date().toLocaleString('es-AR')}`, margin + 4, cursorY + 18);
-    doc.text(`Periodo ${document.period}`, pageWidth - margin - 4, cursorY + 10, { align: 'right' });
-    doc.text(`Estado ${getBillingDocumentStatusLabel(document.status)}`, pageWidth - margin - 4, cursorY + 18, { align: 'right' });
+    const headerTop = cursorY;
+    doc.setDrawColor(226, 232, 240);
+    doc.roundedRect(margin, headerTop, contentWidth, 30, 3, 3, 'S');
+
+    if (logoDataUrl) {
+      doc.addImage(logoDataUrl, 'PNG', margin + 4, headerTop + 4, 10, 10);
+    }
+
     doc.setTextColor(17, 24, 39);
-    cursorY += 34;
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(15);
+    doc.text('TROD', margin + 18, headerTop + 9);
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(9);
+    doc.setTextColor(75, 85, 99);
+    doc.text('Remito mensual de servicios logísticos', margin + 18, headerTop + 14);
+    doc.text(TROD_PHONE, margin + 18, headerTop + 19);
+    doc.text(TROD_ADDRESS, margin + 18, headerTop + 24);
+
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(15);
+    doc.setTextColor(17, 24, 39);
+    doc.text('Remito mensual', pageWidth - margin - 4, headerTop + 9, { align: 'right' });
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(9);
+    doc.setTextColor(75, 85, 99);
+    doc.text(`Generado ${new Date().toLocaleString('es-AR')}`, pageWidth - margin - 4, headerTop + 15, { align: 'right' });
+    doc.text(`Periodo ${document.period} · Estado ${getBillingDocumentStatusLabel(document.status)}`, pageWidth - margin - 4, headerTop + 20, { align: 'right' });
+    doc.setTextColor(17, 24, 39);
+    cursorY += 42;
   };
 
   const ensureSpace = (requiredHeight: number) => {
@@ -186,17 +226,21 @@ export function downloadBillingDocumentPdf(document: BillingDocument, preview?: 
   drawHeader();
 
   doc.setDrawColor(226, 232, 240);
-  doc.roundedRect(margin, cursorY, contentWidth, 28, 2, 2, 'S');
+  doc.roundedRect(margin, cursorY, contentWidth, 32, 2, 2, 'S');
   doc.setFont('helvetica', 'bold');
+  doc.setFontSize(10);
+  doc.setTextColor(107, 114, 128);
+  doc.text('Datos del cliente', margin + 4, cursorY + 7);
+  doc.setTextColor(17, 24, 39);
   doc.setFontSize(12);
-  doc.text(document.client_name, margin + 4, cursorY + 8);
+  doc.text(document.client_name, margin + 4, cursorY + 14);
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(10);
-  doc.text(`Vencimiento: ${new Date(document.due_date).toLocaleDateString('es-AR')}`, margin + 4, cursorY + 16);
-  doc.text(`Remito #${document.id}`, margin + 4, cursorY + 22);
+  doc.text(`Vencimiento: ${new Date(document.due_date).toLocaleDateString('es-AR')}`, margin + 4, cursorY + 22);
+  doc.text(`Remito #${document.id}`, margin + 4, cursorY + 28);
   doc.setFont('helvetica', 'bold');
-  doc.text(`Total: ${formatCurrency(document.total)}`, pageWidth - margin - 4, cursorY + 16, { align: 'right' });
-  cursorY += 36;
+  doc.text(`Total: ${formatCurrency(document.total)}`, pageWidth - margin - 4, cursorY + 22, { align: 'right' });
+  cursorY += 40;
 
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(11);

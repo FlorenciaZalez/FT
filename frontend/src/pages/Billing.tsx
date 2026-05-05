@@ -328,9 +328,13 @@ export default function Billing() {
     }
   };
 
-  const handleDownloadDocument = (document: BillingDocument) => {
+  const handleDownloadDocument = async (document: BillingDocument) => {
     const previewItem = preview.find((item) => item.client_id === document.client_id);
-    downloadBillingDocumentPdf(document, previewItem);
+    try {
+      await downloadBillingDocumentPdf(document, previewItem);
+    } catch (err: unknown) {
+      setError(getApiErrorMessage(err, 'No se pudo descargar el remito.'));
+    }
   };
 
   const handleCreateManualCharge = async (event: FormEvent) => {
