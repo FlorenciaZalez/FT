@@ -2,46 +2,9 @@ import { jsPDF } from 'jspdf';
 import type { BillingDocument, BillingPreviewItem, Charge } from '../services/billing';
 import { formatCurrency, getChargeStatusLabel } from './billingFormat';
 
-const COMPANY_NAME = 'Topix';
+const COMPANY_NAME = 'Topix Fulfillment';
 const COMPANY_PHONE = '+54 9 11 2397 5685';
 const COMPANY_ADDRESS = 'Jose Ignacio de la Rosa 5934, Mataderos, Buenos Aires';
-
-async function loadImageAsDataUrl(imagePath: string): Promise<string | null> {
-  try {
-    const response = await fetch(imagePath);
-    if (!response.ok) {
-      return null;
-    }
-
-    const blob = await response.blob();
-    const objectUrl = URL.createObjectURL(blob);
-
-    return await new Promise((resolve) => {
-      const image = new Image();
-      image.onload = () => {
-        const canvas = document.createElement('canvas');
-        canvas.width = image.naturalWidth || 240;
-        canvas.height = image.naturalHeight || 80;
-        const context = canvas.getContext('2d');
-        if (!context) {
-          URL.revokeObjectURL(objectUrl);
-          resolve(null);
-          return;
-        }
-        context.drawImage(image, 0, 0);
-        URL.revokeObjectURL(objectUrl);
-        resolve(canvas.toDataURL('image/png'));
-      };
-      image.onerror = () => {
-        URL.revokeObjectURL(objectUrl);
-        resolve(null);
-      };
-      image.src = objectUrl;
-    });
-  } catch {
-    return null;
-  }
-}
 
 function getBillingDocumentStatusLabel(status: BillingDocument['status']): string {
   switch (status) {
@@ -143,7 +106,6 @@ export async function downloadBillingDocumentPdf(document: BillingDocument, prev
   const margin = 14;
   const contentWidth = pageWidth - margin * 2;
   let cursorY = margin;
-  const logoDataUrl = await loadImageAsDataUrl('/topix-logo.svg');
 
   const detailLines: BillingRemitoLine[] = [
     {
@@ -207,20 +169,16 @@ export async function downloadBillingDocumentPdf(document: BillingDocument, prev
     doc.setDrawColor(226, 232, 240);
     doc.roundedRect(margin, headerTop, contentWidth, 30, 3, 3, 'S');
 
-    if (logoDataUrl) {
-      doc.addImage(logoDataUrl, 'PNG', margin + 4, headerTop + 4, 26, 8.5);
-    }
-
     doc.setTextColor(17, 24, 39);
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(15);
-    doc.text(COMPANY_NAME, margin + 33, headerTop + 9);
+    doc.text(COMPANY_NAME, margin + 4, headerTop + 9);
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(9);
     doc.setTextColor(75, 85, 99);
-    doc.text('Remito mensual de servicios logísticos', margin + 33, headerTop + 14);
-    doc.text(COMPANY_PHONE, margin + 33, headerTop + 19);
-    doc.text(COMPANY_ADDRESS, margin + 33, headerTop + 24);
+    doc.text('Remito mensual de servicios logísticos', margin + 4, headerTop + 14);
+    doc.text(COMPANY_PHONE, margin + 4, headerTop + 19);
+    doc.text(COMPANY_ADDRESS, margin + 4, headerTop + 24);
 
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(15);
