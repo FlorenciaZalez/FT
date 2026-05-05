@@ -376,9 +376,9 @@ async def _calculate_variable_storage_metrics(
         start.date(),
         billable_end_day,
     )
-    days_in_month = monthrange(start.year, start.month)[1]
-    storage_amount = _calculate_storage_amount_from_daily_volumes(daily_volumes, storage_rate, days_in_month)
-    return current_total_m3, storage_amount, False
+    billed_total_m3 = daily_volumes[-1] if daily_volumes else current_total_m3
+    storage_amount = _to_decimal(billed_total_m3 * storage_rate)
+    return billed_total_m3, storage_amount, False
 
 
 def _serialize_product_creation_record(record: ProductCreationRecord, client_name: str | None = None) -> dict:
