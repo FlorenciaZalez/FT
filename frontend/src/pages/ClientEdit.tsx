@@ -25,7 +25,7 @@ export default function ClientEdit() {
   const [taxId, setTaxId] = useState('');
   const [contactPhone, setContactPhone] = useState('');
   const [plan, setPlan] = useState('basic');
-  const [variableStorageEnabled, setVariableStorageEnabled] = useState(false);
+  const [storageMode, setStorageMode] = useState<'fixed' | 'variable'>('fixed');
 
   useEffect(() => {
     if (!id) return;
@@ -39,7 +39,7 @@ export default function ClientEdit() {
         setTaxId(data.tax_id ?? '');
         setContactPhone(data.contact_phone ?? '');
         setPlan(data.plan);
-        setVariableStorageEnabled(data.variable_storage_enabled ?? false);
+        setStorageMode(data.variable_storage_enabled ? 'variable' : 'fixed');
       })
       .catch(() => setError('Error al cargar el cliente'))
       .finally(() => setLoading(false));
@@ -60,7 +60,7 @@ export default function ClientEdit() {
       tax_id: taxId || undefined,
       contact_phone: contactPhone || undefined,
       plan,
-      variable_storage_enabled: variableStorageEnabled,
+      variable_storage_enabled: storageMode === 'variable',
     };
 
     try {
@@ -193,18 +193,42 @@ export default function ClientEdit() {
             </select>
           </div>
 
-          <div className="rounded-xl border border-blue-100 bg-blue-50 p-4">
-            <label className="flex items-start gap-3 text-sm text-gray-900">
+          <div className="rounded-xl border border-blue-100 bg-blue-50 p-4 space-y-3">
+            <div>
+              <h3 className="text-sm font-semibold text-gray-900">Modo de almacenamiento</h3>
+              <p className="text-xs text-gray-500 mt-1">
+                Elegí si este cliente se factura con almacenamiento fijo mensual o variable según stock.
+              </p>
+            </div>
+            <label className="flex items-start gap-3 rounded-lg border border-gray-200 bg-white px-3 py-3 text-sm text-gray-900">
               <input
-                type="checkbox"
-                checked={variableStorageEnabled}
-                onChange={(e) => setVariableStorageEnabled(e.target.checked)}
-                className="mt-0.5 h-4 w-4 rounded border-gray-200 text-blue-700 focus:ring-blue-500"
+                type="radio"
+                name="storage-mode"
+                value="fixed"
+                checked={storageMode === 'fixed'}
+                onChange={() => setStorageMode('fixed')}
+                className="mt-0.5 h-4 w-4 border-gray-300 text-blue-700 focus:ring-blue-500"
               />
               <span>
-                <span className="block font-semibold">Almacenamiento variable</span>
+                <span className="block font-semibold">Almacenamiento fijo mensual</span>
                 <span className="block text-xs text-gray-500 mt-1">
-                  Cobra el almacenamiento día a día según el stock medido del cliente.
+                  Usa un m3 fijo cargado para el período. Ideal para clientes con abono o valor pactado mensual.
+                </span>
+              </span>
+            </label>
+            <label className="flex items-start gap-3 rounded-lg border border-gray-200 bg-white px-3 py-3 text-sm text-gray-900">
+              <input
+                type="radio"
+                name="storage-mode"
+                value="variable"
+                checked={storageMode === 'variable'}
+                onChange={() => setStorageMode('variable')}
+                className="mt-0.5 h-4 w-4 border-gray-300 text-blue-700 focus:ring-blue-500"
+              />
+              <span>
+                <span className="block font-semibold">Almacenamiento variable por stock</span>
+                <span className="block text-xs text-gray-500 mt-1">
+                  Cobra el almacenamiento día a día según el stock real y los m3 cargados por producto o caja.
                 </span>
               </span>
             </label>

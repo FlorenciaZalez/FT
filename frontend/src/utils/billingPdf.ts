@@ -72,7 +72,7 @@ export function downloadChargesPdf(charges: Charge[], title: string, filePrefix 
     doc.text(`Vencimiento: ${new Date(charge.due_date).toLocaleDateString('es-AR')}`, margin + 55, cursorY + 14);
     doc.text(`Estado: ${getChargeStatusLabel(charge.status)}`, margin + 108, cursorY + 14);
 
-    doc.text(`Storage: ${formatCurrency(charge.storage_amount)} (base ${formatCurrency(charge.base_storage_rate)} / desc ${charge.storage_discount_pct}%)`, margin + 4, cursorY + 22);
+    doc.text(`Almacenamiento: ${formatCurrency(charge.storage_amount)} (base ${formatCurrency(charge.base_storage_rate)} / desc ${charge.storage_discount_pct}%)`, margin + 4, cursorY + 22);
     doc.text(`Preparacion: ${formatCurrency(charge.preparation_amount)} (primer producto ${formatCurrency(charge.base_preparation_rate)} / adicional ${formatCurrency(charge.applied_preparation_rate)})`, margin + 4, cursorY + 27);
     doc.text(`Alta producto: ${formatCurrency(charge.product_creation_amount)}`, margin + 4, cursorY + 32);
     doc.text(`Traslados a transporte: ${formatCurrency(charge.transport_dispatch_amount)}`, margin + 4, cursorY + 37);
