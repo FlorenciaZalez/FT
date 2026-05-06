@@ -1,5 +1,6 @@
 from datetime import date, datetime, timedelta, timezone
 from urllib.parse import urlencode
+import logging
 import re
 
 import httpx
@@ -13,6 +14,8 @@ from app.auth.models import User
 from app.orders.models import Order, OrderSource
 from app.common.exceptions import NotFoundError, ConflictError, BadRequestError
 from app.common.permissions import tenant_filter, check_tenant_access
+
+logger = logging.getLogger(__name__)
 
 ML_AUTH_URL = "https://auth.mercadolibre.com/authorization"
 ML_TOKEN_URL = "https://api.mercadolibre.com/oauth/token"
@@ -214,7 +217,10 @@ async def _get_valid_account(db: AsyncSession, client_id: int) -> MercadoLibreAc
         expires_at = expires_at.replace(tzinfo=timezone.utc)
 
     if expires_at <= datetime.now(timezone.utc) + timedelta(minutes=5):
-        return await refresh_account_token(db, client_id)
+        logger.info("[ML] Token expiry imminent for client_id=%s, refreshing...", client_id)
+        account = await refresh_account_token(db, client_id)
+        logger.info("[ML] Token refreshed successfully for client_id=%s", client_id)
+        return account
 
     return account
 
@@ -368,7 +374,16 @@ def _extract_shipping_address(order_data: dict) -> dict:
 
 async def process_webhook_notification(db: AsyncSession, payload: dict) -> dict:
     topic = str(payload.get("topic") or "").lower()
+    user_id = payload.get("user_id")
+    resource = payload.get("resource")
+
+    logger.info(
+        "[ML][WEBHOOK] Received notification — topic=%r user_id=%r resource=%r attempts=%r",
+        payload.get("topic"), user_id, resource, payload.get("attempts"),
+    )
+
     if "orders" not in topic:
+        logger.info("[ML][WEBHOOK] Ignored: topic %r is not order-related", payload.get("topic"))
         return {
             "received": True,
             "processed": False,
@@ -377,8 +392,8 @@ async def process_webhook_notification(db: AsyncSession, payload: dict) -> dict:
             "order_id": None,
         }
 
-    user_id = payload.get("user_id")
     if user_id is None:
+        logger.warning("[ML][WEBHOOK] Ignored: notification has no user_id. Full payload: %s", payload)
         return {
             "received": True,
             "processed": False,
@@ -392,6 +407,10 @@ async def process_webhook_notification(db: AsyncSession, payload: dict) -> dict:
     )
     account = account_result.scalar_one_or_none()
     if account is None:
+        logger.warning(
+            "[ML][WEBHOOK] Ignored: ml_user_id=%r is not linked to any client in the DB",
+            str(user_id),
+        )
         return {
             "received": True,
             "processed": False,
@@ -400,9 +419,11 @@ async def process_webhook_notification(db: AsyncSession, payload: dict) -> dict:
             "order_id": None,
         }
 
-    resource = payload.get("resource")
+    logger.info("[ML][WEBHOOK] Matched account: client_id=%s ml_nickname=%r", account.client_id, account.ml_nickname)
+
     order_external_id = _extract_order_resource_id(resource)
     if order_external_id is None:
+        logger.warning("[ML][WEBHOOK] Ignored: could not extract order ID from resource=%r", resource)
         return {
             "received": True,
             "processed": False,
@@ -410,6 +431,8 @@ async def process_webhook_notification(db: AsyncSession, payload: dict) -> dict:
             "detail": "Resource de orden invalido",
             "order_id": None,
         }
+
+    logger.info("[ML][WEBHOOK] Extracted order external_id=%s", order_external_id)
 
     existing_result = await db.execute(
         select(Order).where(
@@ -420,6 +443,7 @@ async def process_webhook_notification(db: AsyncSession, payload: dict) -> dict:
     )
     existing_order = existing_result.scalar_one_or_none()
     if existing_order is not None:
+        logger.info("[ML][WEBHOOK] Duplicate: order external_id=%s already exists as order_id=%s", order_external_id, existing_order.id)
         return {
             "received": True,
             "processed": False,
@@ -435,6 +459,7 @@ async def process_webhook_notification(db: AsyncSession, payload: dict) -> dict:
     )
     webhook_actor = webhook_actor_result.scalars().first()
     if webhook_actor is None:
+        logger.error("[ML][WEBHOOK] No active user found for client_id=%s, cannot create order", account.client_id)
         return {
             "received": True,
             "processed": False,
@@ -450,13 +475,21 @@ async def process_webhook_notification(db: AsyncSession, payload: dict) -> dict:
     else:
         resource_url = f"{ML_API_BASE_URL}{resource_path if resource_path.startswith('/') else f'/{resource_path}'}"
 
+    logger.info("[ML][WEBHOOK] Fetching order detail from ML: %s", resource_url)
+
     async with httpx.AsyncClient(timeout=20) as http:
         order_response = await http.get(
             resource_url,
             headers={"Authorization": f"Bearer {valid_account.access_token}"},
         )
 
+    logger.info("[ML][WEBHOOK] ML API responded with status=%s for order=%s", order_response.status_code, order_external_id)
+
     if order_response.status_code != 200:
+        logger.error(
+            "[ML][WEBHOOK] Failed to fetch order %s from ML: status=%s body=%s",
+            order_external_id, order_response.status_code, order_response.text[:500],
+        )
         return {
             "received": True,
             "processed": False,
@@ -468,6 +501,7 @@ async def process_webhook_notification(db: AsyncSession, payload: dict) -> dict:
     order_data = order_response.json()
     order_items = order_data.get("order_items") or []
     if not order_items:
+        logger.warning("[ML][WEBHOOK] Order %s has no items in ML response", order_external_id)
         return {
             "received": True,
             "processed": False,
@@ -482,6 +516,11 @@ async def process_webhook_notification(db: AsyncSession, payload: dict) -> dict:
         if (normalized_item := _normalize_order_item_payload(order_item)) is not None
     ]
     if not normalized_items:
+        logger.warning(
+            "[ML][WEBHOOK] Order %s: could not extract valid ml_item_id from items: %s",
+            order_external_id,
+            [oi.get("item", {}).get("id") for oi in order_items],
+        )
         return {
             "received": True,
             "processed": False,
@@ -505,11 +544,19 @@ async def process_webhook_notification(db: AsyncSession, payload: dict) -> dict:
             normalized_item["variation_id"],
         )
         if mapped_product is None:
+            logger.warning(
+                "[ML][WEBHOOK] Order %s: no mapping found for ml_item_id=%r variation_id=%r client_id=%s",
+                order_external_id, normalized_item["ml_item_id"], normalized_item["variation_id"], account.client_id,
+            )
             unmapped_items_count += 1
             if first_unmapped_item is None:
               first_unmapped_item = normalized_item
             continue
 
+        logger.info(
+            "[ML][WEBHOOK] Order %s: ml_item_id=%r mapped to product_id=%s (%s)",
+            order_external_id, normalized_item["ml_item_id"], mapped_product.id, mapped_product.sku,
+        )
         current_item = aggregated_items_by_product.get(mapped_product.id)
         if current_item is None:
             aggregated_items_by_product[mapped_product.id] = {
@@ -570,6 +617,11 @@ async def process_webhook_notification(db: AsyncSession, payload: dict) -> dict:
         create_payload,
     )
 
+    logger.info(
+        "[ML][WEBHOOK] Order %s created successfully as order_id=%s (all_mapped=%s)",
+        order_external_id, created_order["id"], all_items_mapped,
+    )
+
     return {
         "received": True,
         "processed": True,
@@ -590,6 +642,7 @@ async def _ingest_ml_order_data(
 
     order_external_id = str(order_data.get("id") or "")
     if not order_external_id:
+        logger.warning("[ML][IMPORT] Skipping order with no ID")
         return {"processed": False, "action": "ignored", "detail": "Orden sin ID", "order_id": None}
 
     existing_result = await db.execute(
@@ -601,10 +654,12 @@ async def _ingest_ml_order_data(
     )
     existing_order = existing_result.scalar_one_or_none()
     if existing_order is not None:
+        logger.debug("[ML][IMPORT] Duplicate: order %s already exists as order_id=%s", order_external_id, existing_order.id)
         return {"processed": False, "action": "duplicate", "detail": "La orden ya existe en el sistema", "order_id": existing_order.id}
 
     order_items = order_data.get("order_items") or []
     if not order_items:
+        logger.warning("[ML][IMPORT] Order %s has no items", order_external_id)
         return {"processed": False, "action": "ignored", "detail": "Orden sin items", "order_id": None}
 
     normalized_items = [
@@ -613,6 +668,10 @@ async def _ingest_ml_order_data(
         if (normalized_item := _normalize_order_item_payload(order_item)) is not None
     ]
     if not normalized_items:
+        logger.warning(
+            "[ML][IMPORT] Order %s: could not extract valid ml_item_id from items: %s",
+            order_external_id, [oi.get("item", {}).get("id") for oi in order_items],
+        )
         return {"processed": False, "action": "ignored", "detail": "No se encontro un ml_item_id valido en la orden", "order_id": None}
 
     shipping_data = _extract_shipping_address(order_data)
@@ -629,11 +688,19 @@ async def _ingest_ml_order_data(
             normalized_item["variation_id"],
         )
         if mapped_product is None:
+            logger.warning(
+                "[ML][IMPORT] Order %s: no mapping for ml_item_id=%r variation_id=%r client_id=%s",
+                order_external_id, normalized_item["ml_item_id"], normalized_item["variation_id"], account.client_id,
+            )
             unmapped_items_count += 1
             if first_unmapped_item is None:
                 first_unmapped_item = normalized_item
             continue
 
+        logger.info(
+            "[ML][IMPORT] Order %s: ml_item_id=%r -> product_id=%s (%s)",
+            order_external_id, normalized_item["ml_item_id"], mapped_product.id, mapped_product.sku,
+        )
         current_item = aggregated_items_by_product.get(mapped_product.id)
         if current_item is None:
             aggregated_items_by_product[mapped_product.id] = {
@@ -711,6 +778,11 @@ async def import_orders_from_ml(
     from_str = f"{date_from.isoformat()}T00:00:00.000-0000"
     to_str = f"{date_to.isoformat()}T23:59:59.000-0000"
 
+    logger.info(
+        "[ML][IMPORT] Starting manual import for client_id=%s ml_user_id=%s from=%s to=%s",
+        client_id, account.ml_user_id, from_str, to_str,
+    )
+
     total_found = 0
     imported = 0
     skipped_duplicate = 0
@@ -734,7 +806,9 @@ async def import_orders_from_ml(
                 },
                 headers={"Authorization": f"Bearer {account.access_token}"},
             )
+            logger.info("[ML][IMPORT] ML API search status=%s offset=%s", resp.status_code, offset)
             if resp.status_code != 200:
+                logger.error("[ML][IMPORT] ML API error: status=%s body=%s", resp.status_code, resp.text[:500])
                 raise BadRequestError(f"Error al consultar ordenes en Mercado Libre: {resp.text[:300]}")
 
             data = resp.json()
@@ -744,6 +818,7 @@ async def import_orders_from_ml(
 
             if offset == 0:
                 total_found = total
+                logger.info("[ML][IMPORT] Total orders found in ML for period: %s", total)
 
             for order_data in results:
                 try:
@@ -757,10 +832,16 @@ async def import_orders_from_ml(
                 except Exception as exc:
                     failed += 1
                     errors.append(f"Orden {order_data.get('id', '?')}: {str(exc)}")
+                    logger.exception("[ML][IMPORT] Exception processing order %s", order_data.get("id"))
 
             offset += len(results)
             if offset >= total or not results:
                 break
+
+    logger.info(
+        "[ML][IMPORT] Done client_id=%s: total=%s imported=%s duplicate=%s other=%s failed=%s",
+        client_id, total_found, imported, skipped_duplicate, skipped_other, failed,
+    )
 
     return {
         "total_found": total_found,

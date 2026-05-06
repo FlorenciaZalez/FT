@@ -1,4 +1,5 @@
 from pathlib import Path
+import logging
 
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
@@ -34,6 +35,13 @@ app = FastAPI(
 
 API_PREFIX = "/api/v1"
 settings = get_settings()
+
+# Configure logging so ML integration logs are always visible
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s %(name)s — %(message)s",
+)
+logging.getLogger("app.integrations.mercadolibre").setLevel(logging.INFO)
 
 
 async def _ensure_runtime_schema() -> None:

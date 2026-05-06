@@ -1,6 +1,7 @@
 from urllib.parse import urlencode
+import logging
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -25,6 +26,7 @@ from app.integrations.mercadolibre.schemas import (
 )
 
 router = APIRouter(prefix="/integrations/ml", tags=["MercadoLibre"])
+logger = logging.getLogger(__name__)
 
 
 # ─── OAuth endpoints ─────────────────────────────────────────────
@@ -115,12 +117,21 @@ async def ml_webhook_healthcheck():
 
 @router.post("/webhook", response_model=MLWebhookProcessResponse)
 async def ml_webhook_receiver(
+    request: Request,
     body: MLWebhookNotification,
     db: AsyncSession = Depends(get_db),
 ):
     """Public webhook receiver for Mercado Libre notifications."""
+    logger.info(
+        "[ML][WEBHOOK] POST /webhook — topic=%r user_id=%r resource=%r x-signature=%r",
+        body.topic,
+        body.user_id,
+        body.resource,
+        request.headers.get("x-signature"),
+    )
     result = await service.process_webhook_notification(db, body.dict())
     await db.commit()
+    logger.info("[ML][WEBHOOK] Result: action=%r processed=%r order_id=%r detail=%r", result["action"], result["processed"], result["order_id"], result["detail"])
     return result
 
 
