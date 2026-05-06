@@ -279,6 +279,19 @@ async def request_validation_exception_handler(_: Request, exc: RequestValidatio
     )
 
 
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(_: Request, exc: Exception):
+    import traceback
+    return JSONResponse(
+        status_code=500,
+        content={
+            "detail": str(exc),
+            "type": type(exc).__name__,
+            "trace": traceback.format_exc()[-2000:],
+        },
+    )
+
+
 # ✅ Ruta base
 @app.get("/")
 def root():
