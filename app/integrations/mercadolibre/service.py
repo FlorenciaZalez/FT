@@ -480,6 +480,35 @@ async def fetch_shipping_address(
     }
 
 
+async def fetch_order_detail(
+    db: AsyncSession,
+    client_id: int,
+    order_id: str,
+) -> dict | None:
+    normalized_order_id = str(order_id).strip()
+    if not normalized_order_id:
+        return None
+
+    account = await _get_valid_account(db, client_id)
+    async with httpx.AsyncClient(timeout=20) as http:
+        response = await http.get(
+            f"{ML_API_BASE_URL}/orders/{normalized_order_id}",
+            headers={"Authorization": f"Bearer {account.access_token}"},
+        )
+
+    if response.status_code != 200:
+        logger.warning(
+            "[ML] Could not fetch order detail for order_id=%s client_id=%s: status=%s body=%s",
+            normalized_order_id,
+            client_id,
+            response.status_code,
+            response.text[:500],
+        )
+        return None
+
+    return response.json()
+
+
 async def process_webhook_notification(db: AsyncSession, payload: dict) -> dict:
     topic = str(payload.get("topic") or "").lower()
     user_id = payload.get("user_id")
@@ -754,6 +783,10 @@ async def _ingest_ml_order_data(
     if not order_external_id:
         logger.warning("[ML][IMPORT] Skipping order with no ID")
         return {"processed": False, "action": "ignored", "detail": "Orden sin ID", "order_id": None}
+
+    full_order_data = await fetch_order_detail(db, account.client_id, order_external_id)
+    if full_order_data is not None:
+        order_data = full_order_data
 
     existing_result = await db.execute(
         select(Order).where(
