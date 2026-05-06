@@ -25,82 +25,106 @@ NEW_PRODUCT_WEIGHT_CATEGORY = postgresql.ENUM("simple", "intermedio", "premium",
 def upgrade() -> None:
     bind = op.get_bind()
 
-    op.alter_column(
-        "products",
-        "weight_category",
-        existing_type=OLD_PRODUCT_WEIGHT_CATEGORY,
-        server_default=None,
-        existing_nullable=False,
-    )
-
-    op.execute("ALTER TYPE productweightcategory RENAME TO productweightcategory_old")
-    NEW_PRODUCT_WEIGHT_CATEGORY.create(bind, checkfirst=False)
-
-    op.alter_column(
-        "products",
-        "weight_category",
-        existing_type=OLD_PRODUCT_WEIGHT_CATEGORY,
-        type_=NEW_PRODUCT_WEIGHT_CATEGORY,
-        existing_nullable=False,
-        postgresql_using=(
-            "CASE weight_category::text "
-            "WHEN 'light' THEN 'simple' "
-            "WHEN 'heavy' THEN 'intermedio' "
-            "ELSE 'simple' END::productweightcategory"
-        ),
-    )
-    op.alter_column(
-        "handling_rates",
-        "weight_category",
-        existing_type=OLD_PRODUCT_WEIGHT_CATEGORY,
-        type_=NEW_PRODUCT_WEIGHT_CATEGORY,
-        existing_nullable=False,
-        postgresql_using=(
-            "CASE weight_category::text "
-            "WHEN 'light' THEN 'simple' "
-            "WHEN 'heavy' THEN 'intermedio' "
-            "ELSE 'simple' END::productweightcategory"
-        ),
-    )
-    op.execute("DROP TYPE productweightcategory_old")
-
-    op.execute(
-        """
-        UPDATE products
-        SET preparation_type = CASE
-            WHEN preparation_type = 'especial' THEN 'intermedio'
-            WHEN preparation_type = 'simple' THEN 'simple'
-            ELSE COALESCE(preparation_type, 'simple')
-        END
-        """
-    )
-
-    op.execute(
-        """
-        INSERT INTO handling_rates (weight_category, price, created_at, updated_at)
-        SELECT 'premium'::productweightcategory, price, now(), now()
-        FROM handling_rates
-        WHERE weight_category = 'intermedio'::productweightcategory
-        AND NOT EXISTS (
-            SELECT 1 FROM handling_rates WHERE weight_category = 'premium'::productweightcategory
+    # Check if the enum type already has the new values (idempotency guard)
+    result = bind.execute(
+        sa.text(
+            """
+            SELECT EXISTS (
+                SELECT 1 FROM pg_enum e
+                JOIN pg_type t ON t.oid = e.enumtypid
+                WHERE t.typname = 'productweightcategory'
+                  AND e.enumlabel = 'premium'
+            )
+            """
         )
-        LIMIT 1
-        """
+    )
+    already_migrated = result.scalar()
+
+    if not already_migrated:
+        # Remove server default before changing the type
+        bind.execute(
+            sa.text(
+                "ALTER TABLE products ALTER COLUMN weight_category DROP DEFAULT"
+            )
+        )
+
+        bind.execute(
+            sa.text("ALTER TYPE productweightcategory RENAME TO productweightcategory_old")
+        )
+        NEW_PRODUCT_WEIGHT_CATEGORY.create(bind, checkfirst=True)
+
+        bind.execute(
+            sa.text(
+                """
+                ALTER TABLE products
+                ALTER COLUMN weight_category TYPE productweightcategory
+                USING (
+                    CASE weight_category::text
+                        WHEN 'light' THEN 'simple'
+                        WHEN 'heavy' THEN 'intermedio'
+                        ELSE 'simple'
+                    END::productweightcategory
+                )
+                """
+            )
+        )
+        bind.execute(
+            sa.text(
+                """
+                ALTER TABLE handling_rates
+                ALTER COLUMN weight_category TYPE productweightcategory
+                USING (
+                    CASE weight_category::text
+                        WHEN 'light' THEN 'simple'
+                        WHEN 'heavy' THEN 'intermedio'
+                        ELSE 'simple'
+                    END::productweightcategory
+                )
+                """
+            )
+        )
+        bind.execute(sa.text("DROP TYPE IF EXISTS productweightcategory_old"))
+
+    # Always normalize preparation_type values
+    bind.execute(
+        sa.text(
+            """
+            UPDATE products
+            SET preparation_type = CASE
+                WHEN preparation_type = 'especial' THEN 'intermedio'
+                WHEN preparation_type = 'simple' THEN 'simple'
+                ELSE COALESCE(preparation_type, 'simple')
+            END
+            """
+        )
     )
 
-    op.alter_column(
-        "products",
-        "weight_category",
-        existing_type=NEW_PRODUCT_WEIGHT_CATEGORY,
-        server_default="simple",
-        existing_nullable=False,
+    # Insert premium handling rate if not present
+    bind.execute(
+        sa.text(
+            """
+            INSERT INTO handling_rates (weight_category, price, created_at, updated_at)
+            SELECT 'premium'::productweightcategory, price, now(), now()
+            FROM handling_rates
+            WHERE weight_category = 'intermedio'::productweightcategory
+            AND NOT EXISTS (
+                SELECT 1 FROM handling_rates WHERE weight_category = 'premium'::productweightcategory
+            )
+            LIMIT 1
+            """
+        )
     )
-    op.alter_column(
-        "products",
-        "preparation_type",
-        existing_type=sa.String(length=20),
-        server_default="simple",
-        existing_nullable=False,
+
+    # Set server defaults
+    bind.execute(
+        sa.text(
+            "ALTER TABLE products ALTER COLUMN weight_category SET DEFAULT 'simple'::productweightcategory"
+        )
+    )
+    bind.execute(
+        sa.text(
+            "ALTER TABLE products ALTER COLUMN preparation_type SET DEFAULT 'simple'"
+        )
     )
 
 

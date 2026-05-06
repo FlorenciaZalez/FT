@@ -23,20 +23,59 @@ def upgrade() -> None:
     bind = op.get_bind()
     shipping_category_enum.create(bind, checkfirst=True)
 
-    op.add_column(
-        "clients",
-        sa.Column("shipping_category", shipping_category_enum, nullable=False, server_default="A"),
+    # Add shipping_category to clients if it doesn't exist
+    bind.execute(
+        sa.text(
+            """
+            ALTER TABLE clients
+            ADD COLUMN IF NOT EXISTS shipping_category shippingcategory NOT NULL DEFAULT 'A'
+            """
+        )
     )
-    op.add_column(
-        "shipping_rates",
-        sa.Column("shipping_category", shipping_category_enum, nullable=False, server_default="A"),
+    # Add shipping_category to shipping_rates if it doesn't exist
+    bind.execute(
+        sa.text(
+            """
+            ALTER TABLE shipping_rates
+            ADD COLUMN IF NOT EXISTS shipping_category shippingcategory NOT NULL DEFAULT 'A'
+            """
+        )
     )
 
-    op.drop_constraint("uq_shipping_rates_cordon", "shipping_rates", type_="unique")
-    op.create_unique_constraint(
-        "uq_shipping_rates_category_cordon",
-        "shipping_rates",
-        ["shipping_category", "cordon"],
+    # Drop old unique constraint if it exists
+    bind.execute(
+        sa.text(
+            """
+            DO $$
+            BEGIN
+                IF EXISTS (
+                    SELECT 1 FROM information_schema.table_constraints
+                    WHERE table_name = 'shipping_rates'
+                      AND constraint_name = 'uq_shipping_rates_cordon'
+                ) THEN
+                    ALTER TABLE shipping_rates DROP CONSTRAINT uq_shipping_rates_cordon;
+                END IF;
+            END $$
+            """
+        )
+    )
+    # Create new unique constraint if it doesn't exist
+    bind.execute(
+        sa.text(
+            """
+            DO $$
+            BEGIN
+                IF NOT EXISTS (
+                    SELECT 1 FROM information_schema.table_constraints
+                    WHERE table_name = 'shipping_rates'
+                      AND constraint_name = 'uq_shipping_rates_category_cordon'
+                ) THEN
+                    ALTER TABLE shipping_rates
+                    ADD CONSTRAINT uq_shipping_rates_category_cordon UNIQUE (shipping_category, cordon);
+                END IF;
+            END $$
+            """
+        )
     )
 
     shipping_rates = list(bind.execute(sa.text("SELECT cordon, price FROM shipping_rates WHERE shipping_category = 'A'")))
@@ -44,13 +83,21 @@ def upgrade() -> None:
         for cordon, price in shipping_rates:
             bind.execute(
                 sa.text(
-                    "INSERT INTO shipping_rates (shipping_category, cordon, price) VALUES (:shipping_category, :cordon, :price)"
+                    """
+                    INSERT INTO shipping_rates (shipping_category, cordon, price)
+                    VALUES (:shipping_category, :cordon, :price)
+                    ON CONFLICT (shipping_category, cordon) DO NOTHING
+                    """
                 ),
                 {"shipping_category": category, "cordon": cordon, "price": price},
             )
 
-    op.alter_column("clients", "shipping_category", server_default=None)
-    op.alter_column("shipping_rates", "shipping_category", server_default=None)
+    bind.execute(
+        sa.text("ALTER TABLE clients ALTER COLUMN shipping_category DROP DEFAULT")
+    )
+    bind.execute(
+        sa.text("ALTER TABLE shipping_rates ALTER COLUMN shipping_category DROP DEFAULT")
+    )
 
 
 def downgrade() -> None:
