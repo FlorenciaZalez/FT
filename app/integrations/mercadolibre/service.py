@@ -250,8 +250,12 @@ async def download_shipping_labels_pdf(
 
     if response.status_code != 200:
         detail = response.text.strip()
+        logger.error(
+            "ML shipment_labels failed: status=%s shipment_ids=%s body=%s",
+            response.status_code, normalized_ids, detail[:500] if detail else response.reason_phrase
+        )
         raise BadRequestError(
-            f"Mercado Libre no pudo generar la etiqueta: {detail or response.reason_phrase}"
+            f"Mercado Libre no pudo generar la etiqueta (HTTP {response.status_code}): {detail or response.reason_phrase}"
         )
 
     return response.content

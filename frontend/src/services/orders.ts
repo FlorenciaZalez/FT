@@ -277,7 +277,21 @@ function triggerPdfDownload(blob: Blob, fileName: string): void {
 }
 
 async function requestLabelPdf(url: string, fallbackFileName: string): Promise<LabelPrintJobResult> {
-  const response = await api.post<Blob>(url, undefined, { responseType: 'blob' });
+  let response: Awaited<ReturnType<typeof api.post<Blob>>>;
+  try {
+    response = await api.post<Blob>(url, undefined, { responseType: 'blob' });
+  } catch (err: unknown) {
+    // responseType:'blob' causes Axios to return error bodies as Blob instead of JSON.
+    // Convert the Blob back to JSON so callers can read err.response.data.detail.
+    const axiosErr = err as { response?: { data?: unknown } };
+    if (axiosErr.response?.data instanceof Blob) {
+      try {
+        const text = await (axiosErr.response.data as Blob).text();
+        (axiosErr.response as { data: unknown }).data = JSON.parse(text);
+      } catch { /* ignore parse errors, re-throw original */ }
+    }
+    throw err;
+  }
   const fileName = parseFileName(response.headers as Record<string, string>, fallbackFileName);
   triggerPdfDownload(response.data, fileName);
 
