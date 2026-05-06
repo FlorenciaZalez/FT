@@ -703,7 +703,14 @@ async def _render_order_label_pdfs(
                     )
                     successful_orders.append(order)
                 except BadRequestError as exc:
-                    failed_messages.append(f"{order.order_number}: {exc}")
+                    err_msg = str(exc)
+                    if "NOT_PRINTABLE_STATUS" in err_msg or "delivered" in err_msg.lower():
+                        # Shipment already delivered in ML — generate a local fallback label
+                        client_name = order.client.name if order.client else None
+                        pdf_documents.append(_generate_manual_label_pdf(order, client_name))
+                        successful_orders.append(order)
+                    else:
+                        failed_messages.append(f"{order.order_number}: {exc}")
 
     return pdf_documents, successful_orders, failed_messages
 
