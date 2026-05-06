@@ -419,6 +419,67 @@ def _extract_shipping_address(order_data: dict) -> dict:
     }
 
 
+def _shipping_address_is_missing(shipping_data: dict) -> bool:
+    return not any(
+        shipping_data.get(field)
+        for field in ("address_line", "city", "state", "postal_code")
+    )
+
+
+async def fetch_shipping_address(
+    db: AsyncSession,
+    client_id: int,
+    shipping_id: str,
+) -> dict:
+    normalized_shipping_id = str(shipping_id).strip()
+    if not normalized_shipping_id:
+        return {
+            "shipping_id": None,
+            "address_line": None,
+            "city": None,
+            "state": None,
+            "postal_code": None,
+            "address_reference": None,
+        }
+
+    account = await _get_valid_account(db, client_id)
+    async with httpx.AsyncClient(timeout=20) as http:
+        response = await http.get(
+            f"{ML_API_BASE_URL}/shipments/{normalized_shipping_id}",
+            headers={"Authorization": f"Bearer {account.access_token}"},
+        )
+
+    if response.status_code != 200:
+        logger.warning(
+            "[ML] Could not fetch shipment detail for shipping_id=%s client_id=%s: status=%s body=%s",
+            normalized_shipping_id,
+            client_id,
+            response.status_code,
+            response.text[:500],
+        )
+        return {
+            "shipping_id": normalized_shipping_id,
+            "address_line": None,
+            "city": None,
+            "state": None,
+            "postal_code": None,
+            "address_reference": None,
+        }
+
+    shipment_data = response.json()
+    receiver = shipment_data.get("receiver_address") or {}
+    city = receiver.get("city") or {}
+    state = receiver.get("state") or {}
+    return {
+        "shipping_id": str(shipment_data.get("id") or normalized_shipping_id),
+        "address_line": receiver.get("address_line") or receiver.get("comment"),
+        "city": city.get("name") if isinstance(city, dict) else None,
+        "state": state.get("name") if isinstance(state, dict) else None,
+        "postal_code": receiver.get("zip_code"),
+        "address_reference": receiver.get("comment"),
+    }
+
+
 async def process_webhook_notification(db: AsyncSession, payload: dict) -> dict:
     topic = str(payload.get("topic") or "").lower()
     user_id = payload.get("user_id")
@@ -576,6 +637,8 @@ async def process_webhook_notification(db: AsyncSession, payload: dict) -> dict:
             "order_id": None,
         }
     shipping_data = _extract_shipping_address(order_data)
+    if shipping_data["shipping_id"] and _shipping_address_is_missing(shipping_data):
+        shipping_data = await fetch_shipping_address(db, account.client_id, shipping_data["shipping_id"])
 
     from app.orders import service as orders_service
 
@@ -722,6 +785,8 @@ async def _ingest_ml_order_data(
         return {"processed": False, "action": "ignored", "detail": "No se encontro un ml_item_id valido en la orden", "order_id": None}
 
     shipping_data = _extract_shipping_address(order_data)
+    if shipping_data["shipping_id"] and _shipping_address_is_missing(shipping_data):
+        shipping_data = await fetch_shipping_address(db, account.client_id, shipping_data["shipping_id"])
 
     aggregated_items_by_product: dict[int, dict] = {}
     first_unmapped_item: dict | None = None

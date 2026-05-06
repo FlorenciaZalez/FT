@@ -705,7 +705,27 @@ async def _render_order_label_pdfs(
                 except BadRequestError as exc:
                     err_msg = str(exc)
                     if "NOT_PRINTABLE_STATUS" in err_msg or "delivered" in err_msg.lower():
-                        # Shipment already delivered in ML — generate a local fallback label
+                        # Shipment already delivered in ML — generate a local fallback label.
+                        # Older imported orders may not have receiver address data embedded, so hydrate it from shipment detail first.
+                        if order.source == OrderSource.mercadolibre and order.shipping_id and not _build_maps_query(order):
+                            shipping_data = await mercadolibre_service.fetch_shipping_address(
+                                db,
+                                order.client_id,
+                                str(order.shipping_id),
+                            )
+                            order.address_line = shipping_data.get("address_line")
+                            order.city = shipping_data.get("city")
+                            order.state = shipping_data.get("state")
+                            order.postal_code = shipping_data.get("postal_code")
+                            if shipping_data.get("address_reference") and not order.address_reference:
+                                order.address_reference = shipping_data.get("address_reference")
+
+                        if not _build_maps_query(order):
+                            failed_messages.append(
+                                f"{order.order_number}: El pedido no tiene una direccion valida para generar la etiqueta"
+                            )
+                            continue
+
                         client_name = order.client.name if order.client else None
                         pdf_documents.append(_generate_manual_label_pdf(order, client_name))
                         successful_orders.append(order)
