@@ -107,6 +107,46 @@ class OrderServiceRegressionTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(calls_by_client[4], 2)
         self.assertEqual(calls_by_client[9], 1)
 
+    async def test_start_batch_picking_rejects_oversized_session(self) -> None:
+        user = SimpleNamespace(id=21)
+        oversized_rows = [
+            (
+                SimpleNamespace(quantity=501, picked_quantity=0, sku="SKU-1"),
+                SimpleNamespace(),
+                SimpleNamespace(),
+            )
+        ]
+        db = _FakeDb(execute_results=[SimpleNamespace(all=lambda: oversized_rows)])
+
+        with (
+            patch("app.orders.service._get_active_batch_picking_session_for_user", AsyncMock(return_value=None)),
+            patch("app.orders.service.tenant_filter", side_effect=lambda query, *_: query),
+            patch("app.orders.service._apply_zone_visibility", side_effect=lambda query, *_: query),
+        ):
+            with self.assertRaises(order_service.BadRequestError) as exc:
+                await order_service.start_batch_picking_session(db, user)
+
+        self.assertIn("demasiado grande", str(exc.exception))
+
+    async def test_expand_exchange_order_ids_rejects_partial_dispatch(self) -> None:
+        db = _FakeDb(
+            execute_results=[
+                SimpleNamespace(all=lambda: [SimpleNamespace(id=1, exchange_id="EX-1")]),
+                SimpleNamespace(
+                    all=lambda: [
+                        SimpleNamespace(id=1, order_number="ORD-1", status=OrderStatus.prepared),
+                        SimpleNamespace(id=2, order_number="ORD-2", status=OrderStatus.pending),
+                    ]
+                ),
+            ]
+        )
+
+        with self.assertRaises(order_service.BadRequestError) as exc:
+            await order_service._expand_exchange_order_ids(db, [1])
+
+        self.assertIn("No se puede despachar parcialmente un cambio", str(exc.exception))
+        self.assertIn("ORD-2", str(exc.exception))
+
 
 if __name__ == "__main__":
     unittest.main()

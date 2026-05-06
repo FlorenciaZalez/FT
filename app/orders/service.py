@@ -52,6 +52,7 @@ MAPPING_STATUS_UNMAPPED = "unmapped"
 BATCH_PICKING_STATUS_ACTIVE = "active"
 BATCH_PICKING_STATUS_COMPLETED = "completed"
 MAX_ML_SHIPMENT_LABELS_PER_REQUEST = 50
+MAX_BATCH_PICKING_UNITS = 500
 RETURN_REVIEW_LOCATION_CODE = "RET-REVIEW"
 MERCADOLIBRE_LABEL_PAGE_SIZE = (100 * mm, 150 * mm)
 MANUAL_LABEL_PAGE_SIZE = (4 * inch, 6 * inch)
@@ -1798,6 +1799,16 @@ async def start_batch_picking_session(db: AsyncSession, user: User) -> dict:
             "No hay pedidos pendientes con SKU interno resuelto para iniciar picking masivo"
         )
 
+    total_units = sum(
+        max(order_item.quantity - order_item.picked_quantity, 0)
+        for order_item, _, _ in rows
+    )
+    if total_units > MAX_BATCH_PICKING_UNITS:
+        raise BadRequestError(
+            f"La sesión de picking masivo es demasiado grande ({total_units} unidades). "
+            f"Reducí pendientes o filtrá una zona más chica antes de iniciar."
+        )
+
     session = BatchPickingSession(
         status=BATCH_PICKING_STATUS_ACTIVE,
         user_id=user.id,
@@ -2352,13 +2363,22 @@ async def _expand_exchange_order_ids(db: AsyncSession, order_ids: list[int]) -> 
         return order_ids
 
     related_result = await db.execute(
-        select(Order.id)
-        .where(
-            Order.exchange_id.in_(exchange_ids),
-            Order.status == OrderStatus.prepared,
-        )
+        select(Order.id, Order.order_number, Order.status)
+        .where(Order.exchange_id.in_(exchange_ids))
     )
-    related_ids = {row.id for row in related_result.all()}
+    related_rows = related_result.all()
+    not_ready_orders = [
+        row.order_number
+        for row in related_rows
+        if row.status != OrderStatus.prepared
+    ]
+    if not_ready_orders:
+        raise BadRequestError(
+            "No se puede despachar parcialmente un cambio. Faltan preparar: "
+            + ", ".join(not_ready_orders)
+        )
+
+    related_ids = {row.id for row in related_rows}
     return list({*order_ids, *related_ids})
 
 
