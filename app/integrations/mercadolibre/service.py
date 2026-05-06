@@ -225,6 +225,41 @@ async def _get_valid_account(db: AsyncSession, client_id: int) -> MercadoLibreAc
     return account
 
 
+async def _validate_ml_item_for_client(
+    db: AsyncSession,
+    client_id: int,
+    ml_item_id: str,
+) -> None:
+    normalized_item_id = normalize_ml_item_id(ml_item_id)
+    if normalized_item_id is None:
+        raise BadRequestError("ml_item_id is required")
+
+    account = await _get_valid_account(db, client_id)
+    async with httpx.AsyncClient(timeout=15) as http:
+        response = await http.get(
+            f"{ML_API_BASE_URL}/items/{normalized_item_id}",
+            headers={"Authorization": f"Bearer {account.access_token}"},
+        )
+
+    if response.status_code == 404:
+        raise BadRequestError(
+            f"La publicacion {normalized_item_id} no existe en Mercado Libre"
+        )
+
+    if response.status_code != 200:
+        detail = response.text.strip()
+        raise BadRequestError(
+            f"No se pudo validar la publicacion {normalized_item_id} en Mercado Libre: {detail or response.reason_phrase}"
+        )
+
+    item_data = response.json()
+    seller_id = item_data.get("seller_id")
+    if seller_id is not None and str(seller_id) != str(account.ml_user_id):
+        raise BadRequestError(
+            f"La publicacion {normalized_item_id} no pertenece a la cuenta conectada"
+        )
+
+
 async def download_shipping_labels_pdf(
     db: AsyncSession,
     client_id: int,
@@ -281,6 +316,8 @@ async def create_mapping(db: AsyncSession, user: User, data: dict) -> dict:
     normalized_item_id = normalize_ml_item_id(data.get("ml_item_id"))
     if normalized_item_id is None:
         raise BadRequestError("ml_item_id is required")
+
+    await _validate_ml_item_for_client(db, client_id, normalized_item_id)
 
     # Verify product exists and belongs to tenant
     product = await db.get(Product, data["product_id"])
@@ -875,6 +912,7 @@ async def update_mapping(db: AsyncSession, mapping_id: int, user: User, data: di
 
     next_item_id = data.get("ml_item_id", mapping.ml_item_id)
     next_variation_id = data.get("ml_variation_id", mapping.ml_variation_id)
+    await _validate_ml_item_for_client(db, mapping.client_id, next_item_id)
     duplicate = await db.execute(
         select(MLProductMapping).where(
             MLProductMapping.client_id == mapping.client_id,
@@ -917,6 +955,8 @@ async def upsert_mapping(
     normalized_item_id = normalize_ml_item_id(ml_item_id)
     if normalized_item_id is None:
         raise BadRequestError("ml_item_id is required")
+
+    await _validate_ml_item_for_client(db, client_id, normalized_item_id)
 
     product = await db.get(Product, product_id)
     if product is None:
