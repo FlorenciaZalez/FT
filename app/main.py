@@ -257,6 +257,127 @@ async def _ensure_runtime_schema() -> None:
                 """
             )
         )
+        # Heal ProductWeightCategory enum: if DB still has old values (light/heavy),
+        # rename old type, create new type (simple/intermedio/premium), migrate data.
+        await connection.execute(
+            text(
+                """
+                DO $$
+                DECLARE
+                    v_has_heavy  boolean;
+                    v_has_premium boolean;
+                    v_old_exists  boolean;
+                BEGIN
+                    SELECT EXISTS (
+                        SELECT 1 FROM pg_enum e
+                        JOIN pg_type t ON t.oid = e.enumtypid
+                        WHERE t.typname = 'productweightcategory' AND e.enumlabel = 'heavy'
+                    ) INTO v_has_heavy;
+
+                    SELECT EXISTS (
+                        SELECT 1 FROM pg_enum e
+                        JOIN pg_type t ON t.oid = e.enumtypid
+                        WHERE t.typname = 'productweightcategory' AND e.enumlabel = 'premium'
+                    ) INTO v_has_premium;
+
+                    -- Check if old renamed type already exists (partial migration)
+                    SELECT EXISTS (
+                        SELECT 1 FROM pg_type WHERE typname = 'productweightcategory_old'
+                    ) INTO v_old_exists;
+
+                    IF v_old_exists THEN
+                        -- Previous run partially migrated: type was renamed but columns not yet updated
+                        -- Create new type if not there already
+                        IF NOT EXISTS (
+                            SELECT 1 FROM pg_type WHERE typname = 'productweightcategory'
+                        ) THEN
+                            CREATE TYPE productweightcategory AS ENUM ('simple', 'intermedio', 'premium');
+                        END IF;
+
+                        ALTER TABLE products
+                        ALTER COLUMN weight_category TYPE productweightcategory
+                        USING (
+                            CASE weight_category::text
+                                WHEN 'light' THEN 'simple'
+                                WHEN 'heavy' THEN 'intermedio'
+                                ELSE 'simple'
+                            END::productweightcategory
+                        );
+
+                        ALTER TABLE handling_rates
+                        ALTER COLUMN weight_category TYPE productweightcategory
+                        USING (
+                            CASE weight_category::text
+                                WHEN 'light' THEN 'simple'
+                                WHEN 'heavy' THEN 'intermedio'
+                                ELSE 'simple'
+                            END::productweightcategory
+                        );
+
+                        DROP TYPE IF EXISTS productweightcategory_old;
+
+                    ELSIF v_has_heavy AND NOT v_has_premium THEN
+                        -- Full migration needed
+                        ALTER TABLE products ALTER COLUMN weight_category DROP DEFAULT;
+
+                        BEGIN
+                            ALTER TABLE handling_rates ALTER COLUMN weight_category DROP DEFAULT;
+                        EXCEPTION WHEN OTHERS THEN
+                            NULL;
+                        END;
+
+                        ALTER TYPE productweightcategory RENAME TO productweightcategory_old;
+                        CREATE TYPE productweightcategory AS ENUM ('simple', 'intermedio', 'premium');
+
+                        ALTER TABLE products
+                        ALTER COLUMN weight_category TYPE productweightcategory
+                        USING (
+                            CASE weight_category::text
+                                WHEN 'light' THEN 'simple'
+                                WHEN 'heavy' THEN 'intermedio'
+                                ELSE 'simple'
+                            END::productweightcategory
+                        );
+
+                        ALTER TABLE handling_rates
+                        ALTER COLUMN weight_category TYPE productweightcategory
+                        USING (
+                            CASE weight_category::text
+                                WHEN 'light' THEN 'simple'
+                                WHEN 'heavy' THEN 'intermedio'
+                                ELSE 'simple'
+                            END::productweightcategory
+                        );
+
+                        DROP TYPE IF EXISTS productweightcategory_old;
+
+                        ALTER TABLE products
+                        ALTER COLUMN weight_category SET DEFAULT 'simple'::productweightcategory;
+                    END IF;
+
+                    -- Always normalize preparation_type values
+                    UPDATE products
+                    SET preparation_type = CASE
+                        WHEN preparation_type = 'especial' THEN 'intermedio'
+                        WHEN preparation_type NOT IN ('simple', 'intermedio', 'premium') THEN 'simple'
+                        ELSE preparation_type
+                    END
+                    WHERE preparation_type IN ('especial')
+                       OR preparation_type NOT IN ('simple', 'intermedio', 'premium');
+
+                    -- Insert premium handling rate if missing
+                    INSERT INTO handling_rates (weight_category, price, created_at, updated_at)
+                    SELECT 'premium'::productweightcategory, price, now(), now()
+                    FROM handling_rates
+                    WHERE weight_category = 'intermedio'::productweightcategory
+                    AND NOT EXISTS (
+                        SELECT 1 FROM handling_rates WHERE weight_category = 'premium'::productweightcategory
+                    )
+                    LIMIT 1;
+                END $$;
+                """
+            )
+        )
 
 
 def _format_validation_error(exc: RequestValidationError) -> str:
