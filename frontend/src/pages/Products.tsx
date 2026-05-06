@@ -26,6 +26,13 @@ function parseMercadoLibreItemReference(rawValue: string): { normalized: string[
     return { normalized: [], error: null };
   }
 
+  if (/\/P\/ML[A-Z]{2}\d+/i.test(trimmedValue) || /\bML[A-Z]{2}\d+\b/i.test(trimmedValue)) {
+    return {
+      normalized: [],
+      error: 'Ese codigo parece ser de la pagina de producto (por ejemplo /p/MLAU...). Para mapear, usá el ID de la publicacion: MLA123..., el link de la publicacion o el item_id real del pedido.',
+    };
+  }
+
   const parts = trimmedValue
     .split(/[\n,;]+/)
     .map((value) => value.trim())
@@ -39,7 +46,7 @@ function parseMercadoLibreItemReference(rawValue: string): { normalized: string[
     if (!match) {
       return {
         normalized: [],
-        error: 'Ingresá links o IDs válidos de MercadoLibre, uno por línea.',
+        error: 'Ingresá links o IDs válidos de publicaciones de MercadoLibre, uno por línea. No uses códigos /p/MLAU... de páginas de producto.',
       };
     }
 
@@ -621,7 +628,7 @@ function EditProductModal({
             )}
             {!mlItemDetection.error && (
               <p className="text-xs text-gray-500 mt-1">
-                Podés cargar varias publicaciones del mismo producto, una por línea. Si vaciás el campo, se eliminan los mappings simples.
+                Podés cargar varias publicaciones del mismo producto, una por línea. Usá el ID de la publicación (por ejemplo MLA123...) o el link de la publicación, no el código /p/MLAU... de la página de producto. Si vaciás el campo, se eliminan los mappings simples.
               </p>
             )}
           </div>

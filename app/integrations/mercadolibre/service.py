@@ -31,6 +31,12 @@ _ML_PLACEHOLDER_VALUES = {
 }
 
 
+ML_ITEM_FORMAT_ERROR = (
+    "El item de MercadoLibre debe ser el ID de la publicacion (por ejemplo MLA123456789) "
+    "o una URL valida de la publicacion. No uses codigos /p/MLAU... de paginas de producto."
+)
+
+
 def normalize_ml_item_id(raw_value: str | None) -> str | None:
     if raw_value is None:
         return None
@@ -41,7 +47,7 @@ def normalize_ml_item_id(raw_value: str | None) -> str | None:
 
     match = ML_ITEM_ID_PATTERN.search(value)
     if match is None:
-        raise BadRequestError("El item de MercadoLibre debe tener formato MLA123456789 o una URL válida")
+        raise BadRequestError(ML_ITEM_FORMAT_ERROR)
 
     return f"{match.group(1).upper()}{match.group(2)}"
 
@@ -63,7 +69,7 @@ def normalize_ml_item_ids(raw_value: str | None) -> list[str]:
             normalized.append(item_id)
 
     if not normalized:
-        raise BadRequestError("El item de MercadoLibre debe tener formato MLA123456789 o una URL válida")
+        raise BadRequestError(ML_ITEM_FORMAT_ERROR)
 
     return normalized
 
