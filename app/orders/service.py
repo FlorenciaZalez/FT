@@ -5,7 +5,7 @@ from urllib.parse import quote
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import select, func, or_
+from sqlalchemy import select, func, or_, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload, joinedload
 from pypdf import PageObject, PdfReader, PdfWriter, Transformation
@@ -45,6 +45,7 @@ from app.shipping import service as shipping_service
 from app.integrations.mercadolibre import service as mercadolibre_service
 from app.integrations.mercadolibre.models import MLProductMapping, MLMappingReconciliationLog
 from app.billing.service import record_prepared_order, record_transport_dispatch
+from app.billing.models import PreparationRecord
 
 MAPPING_STATUS_RESOLVED = "resolved"
 MAPPING_STATUS_UNMAPPED = "unmapped"
@@ -1521,6 +1522,16 @@ async def dispatch_order(db: AsyncSession, order_id: int, user: User, tracking_n
     if tracking_number:
         order.tracking_number = tracking_number
 
+    if order.operation_type == OrderOperationType.sale:
+        await record_transport_dispatch(
+            db,
+            client_id=order.client_id,
+            transportista=None,
+            cantidad_pedidos=1,
+            fecha=order.dispatched_at,
+            origen="despacho_individual",
+        )
+
     await _log_status_change(db, order, order.status, user.id)
     await db.flush()
     await db.refresh(order)
@@ -1709,6 +1720,11 @@ async def cancel_order(db: AsyncSession, order_id: int, user: User, reason: str 
     order = await _get_order(db, order_id, user)
     await _ensure_order_not_in_active_batch_session(db, order.id)
     _validate_transition(order.status, OrderStatus.cancelled)
+
+    if order.status == OrderStatus.prepared:
+        await db.execute(
+            delete(PreparationRecord).where(PreparationRecord.order_id == order.id)
+        )
 
     if order.operation_type == OrderOperationType.sale:
         for item in order.items:
@@ -2437,12 +2453,16 @@ async def batch_dispatch(
         await _dispatch_order_in_batch(db, order, user, batch_number, batch.id, now)
 
     if register_transport_transfer:
-        for current_client_id in {order.client_id for order in orders}:
+        orders_per_client: dict[int, int] = {}
+        for order in orders:
+            orders_per_client[order.client_id] = orders_per_client.get(order.client_id, 0) + 1
+
+        for current_client_id, order_count in orders_per_client.items():
             await record_transport_dispatch(
                 db,
                 client_id=current_client_id,
                 transportista=resolved_carrier,
-                cantidad_pedidos=1,
+                cantidad_pedidos=order_count,
                 fecha=now,
                 origen="sesion_despacho",
             )

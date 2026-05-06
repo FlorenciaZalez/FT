@@ -194,6 +194,10 @@ function getShippingSummary(order: Order | null): { primary: string; details: st
 
   const details: string[] = [];
 
+  if (order.postal_code) {
+    details.push(`CP ${order.postal_code}`);
+  }
+
   if (order.cordon) {
     details.push(`Cordón ${order.cordon}`);
   }
@@ -1069,7 +1073,7 @@ export default function Orders() {
                 <th className="text-left px-6 py-3 font-medium text-gray-500">Nº Pedido</th>
                 <th className="text-left px-6 py-3 font-medium text-gray-500">Cliente</th>
                 <th className="text-left px-6 py-3 font-medium text-gray-500">Productos</th>
-                <th className="text-left px-6 py-3 font-medium text-gray-500">Zona</th>
+                <th className="text-left px-6 py-3 font-medium text-gray-500">Zona picking</th>
                 <th className="text-left px-6 py-3 font-medium text-gray-500">Envío</th>
                 <th className="text-left px-6 py-3 font-medium text-gray-500">Estado</th>
                 <th className="text-left px-6 py-3 font-medium text-gray-500">Despacho</th>
@@ -1178,13 +1182,22 @@ export default function Orders() {
                       </div>
                     </td>
                     <td className="px-6 py-4">
-                      {deliveryOrder?.dominant_zone ? (
-                        <span className="bg-yellow-50 text-yellow-800 px-2 py-0.5 rounded text-xs font-medium">
-                          {deliveryOrder.dominant_zone}
+                      <div className="flex flex-col gap-1">
+                        {deliveryOrder?.dominant_zone ? (
+                          <span className="bg-yellow-50 text-yellow-800 px-2 py-0.5 rounded text-xs font-medium w-fit">
+                            {deliveryOrder.dominant_zone}
+                          </span>
+                        ) : (
+                          <span className="text-border text-xs">—</span>
+                        )}
+                        <span className="text-[11px] text-gray-500">
+                          {deliveryOrder?.postal_code
+                            ? `CP ${deliveryOrder.postal_code}${deliveryOrder?.cordon ? ` · Cordón ${deliveryOrder.cordon}` : ''}`
+                            : deliveryOrder?.cordon
+                              ? `Cordón ${deliveryOrder.cordon}`
+                              : 'Sin CP de envío'}
                         </span>
-                      ) : (
-                        <span className="text-border text-xs">—</span>
-                      )}
+                      </div>
                     </td>
                     <td className="px-6 py-4 text-xs">
                       <div className="flex items-center gap-2">
