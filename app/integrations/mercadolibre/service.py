@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from urllib.parse import urlencode
 import re
 
@@ -576,6 +576,199 @@ async def process_webhook_notification(db: AsyncSession, payload: dict) -> dict:
         "action": "created",
         "detail": "Orden importada desde Mercado Libre",
         "order_id": created_order["id"],
+    }
+
+
+async def _ingest_ml_order_data(
+    db: AsyncSession,
+    account: MercadoLibreAccount,
+    order_data: dict,
+    webhook_actor: User,
+) -> dict:
+    """Process a single ML order dict and persist it as an Order if not a duplicate."""
+    from app.orders import service as orders_service
+
+    order_external_id = str(order_data.get("id") or "")
+    if not order_external_id:
+        return {"processed": False, "action": "ignored", "detail": "Orden sin ID", "order_id": None}
+
+    existing_result = await db.execute(
+        select(Order).where(
+            Order.client_id == account.client_id,
+            Order.source == OrderSource.mercadolibre,
+            Order.external_id == order_external_id,
+        )
+    )
+    existing_order = existing_result.scalar_one_or_none()
+    if existing_order is not None:
+        return {"processed": False, "action": "duplicate", "detail": "La orden ya existe en el sistema", "order_id": existing_order.id}
+
+    order_items = order_data.get("order_items") or []
+    if not order_items:
+        return {"processed": False, "action": "ignored", "detail": "Orden sin items", "order_id": None}
+
+    normalized_items = [
+        normalized_item
+        for order_item in order_items
+        if (normalized_item := _normalize_order_item_payload(order_item)) is not None
+    ]
+    if not normalized_items:
+        return {"processed": False, "action": "ignored", "detail": "No se encontro un ml_item_id valido en la orden", "order_id": None}
+
+    shipping_data = _extract_shipping_address(order_data)
+
+    aggregated_items_by_product: dict[int, dict] = {}
+    first_unmapped_item: dict | None = None
+    unmapped_items_count = 0
+
+    for normalized_item in normalized_items:
+        mapped_product = await resolve_ml_to_product(
+            db,
+            account.client_id,
+            normalized_item["ml_item_id"],
+            normalized_item["variation_id"],
+        )
+        if mapped_product is None:
+            unmapped_items_count += 1
+            if first_unmapped_item is None:
+                first_unmapped_item = normalized_item
+            continue
+
+        current_item = aggregated_items_by_product.get(mapped_product.id)
+        if current_item is None:
+            aggregated_items_by_product[mapped_product.id] = {
+                "product_id": mapped_product.id,
+                "quantity": normalized_item["quantity"],
+            }
+        else:
+            current_item["quantity"] += normalized_item["quantity"]
+
+    mapped_items_data = list(aggregated_items_by_product.values())
+    all_items_mapped = len(mapped_items_data) > 0 and first_unmapped_item is None
+
+    notes = "Creado automaticamente desde Mercado Libre"
+    if len(normalized_items) > 1:
+        notes = f"{notes}. Items detectados: {len(normalized_items)}"
+    if not all_items_mapped and first_unmapped_item is not None:
+        notes = (
+            f"{notes}. Quedo pendiente de mapeo automatico: "
+            f"{unmapped_items_count} item(s) sin mapping resuelto."
+        )
+
+    create_payload = {
+        "client_id": account.client_id,
+        "source": OrderSource.mercadolibre.value,
+        "external_id": order_external_id,
+        "shipping_id": shipping_data["shipping_id"],
+        "buyer_name": _coalesce_buyer_name(order_data),
+        "address_line": shipping_data["address_line"],
+        "city": shipping_data["city"],
+        "state": shipping_data["state"],
+        "postal_code": shipping_data["postal_code"],
+        "address_reference": shipping_data["address_reference"],
+        "notes": notes,
+    }
+
+    if all_items_mapped:
+        if len(normalized_items) == 1:
+            create_payload.update({
+                "ml_item_id": normalized_items[0]["ml_item_id"],
+                "variation_id": normalized_items[0]["variation_id"],
+                "quantity": normalized_items[0]["quantity"],
+            })
+        create_payload["items"] = mapped_items_data
+    else:
+        create_payload.update({
+            "ml_item_id": first_unmapped_item["ml_item_id"],
+            "variation_id": first_unmapped_item["variation_id"],
+            "quantity": first_unmapped_item["quantity"],
+        })
+
+    created_order = await orders_service.create_order(db, webhook_actor, create_payload)
+
+    return {"processed": True, "action": "created", "detail": "Orden importada desde Mercado Libre", "order_id": created_order["id"]}
+
+
+async def import_orders_from_ml(
+    db: AsyncSession,
+    client_id: int,
+    date_from: date,
+    date_to: date,
+    user: User,
+) -> dict:
+    """Manually import ML orders for a date range. Returns a summary of imported/skipped orders."""
+    account = await _get_valid_account(db, client_id)
+
+    webhook_actor_result = await db.execute(
+        select(User)
+        .where(User.client_id == client_id, User.is_active.is_(True))
+        .order_by(User.id.asc())
+    )
+    webhook_actor = webhook_actor_result.scalars().first()
+    if webhook_actor is None:
+        raise BadRequestError("No hay usuario activo para registrar las ordenes en este cliente")
+
+    from_str = f"{date_from.isoformat()}T00:00:00.000-0000"
+    to_str = f"{date_to.isoformat()}T23:59:59.000-0000"
+
+    total_found = 0
+    imported = 0
+    skipped_duplicate = 0
+    skipped_other = 0
+    failed = 0
+    errors: list[str] = []
+
+    limit = 50
+    offset = 0
+
+    async with httpx.AsyncClient(timeout=30) as http:
+        while True:
+            resp = await http.get(
+                f"{ML_API_BASE_URL}/orders/search",
+                params={
+                    "seller": account.ml_user_id,
+                    "order.date_created.from": from_str,
+                    "order.date_created.to": to_str,
+                    "limit": limit,
+                    "offset": offset,
+                },
+                headers={"Authorization": f"Bearer {account.access_token}"},
+            )
+            if resp.status_code != 200:
+                raise BadRequestError(f"Error al consultar ordenes en Mercado Libre: {resp.text[:300]}")
+
+            data = resp.json()
+            results = data.get("results") or []
+            paging = data.get("paging") or {}
+            total = paging.get("total", 0)
+
+            if offset == 0:
+                total_found = total
+
+            for order_data in results:
+                try:
+                    result = await _ingest_ml_order_data(db, account, order_data, webhook_actor)
+                    if result["action"] == "created":
+                        imported += 1
+                    elif result["action"] == "duplicate":
+                        skipped_duplicate += 1
+                    else:
+                        skipped_other += 1
+                except Exception as exc:
+                    failed += 1
+                    errors.append(f"Orden {order_data.get('id', '?')}: {str(exc)}")
+
+            offset += len(results)
+            if offset >= total or not results:
+                break
+
+    return {
+        "total_found": total_found,
+        "imported": imported,
+        "skipped_duplicate": skipped_duplicate,
+        "skipped_other": skipped_other,
+        "failed": failed,
+        "errors": errors,
     }
 
 

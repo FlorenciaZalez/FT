@@ -78,6 +78,28 @@ export async function deleteMLMapping(id: number): Promise<void> {
   await api.delete(`/integrations/ml/mappings/${id}`);
 }
 
+export interface MLImportResult {
+  total_found: number;
+  imported: number;
+  skipped_duplicate: number;
+  skipped_other: number;
+  failed: number;
+  errors: string[];
+}
+
+export async function importMLOrders(
+  clientId: number,
+  dateFrom: string,
+  dateTo: string,
+): Promise<MLImportResult> {
+  const { data } = await api.post<MLImportResult>('/integrations/ml/import', {
+    client_id: clientId,
+    date_from: dateFrom,
+    date_to: dateTo,
+  });
+  return data;
+}
+
 export function getApiErrorMessage(error: unknown, fallback: string): string {
   if (axios.isAxiosError(error)) {
     const detail = error.response?.data?.detail;

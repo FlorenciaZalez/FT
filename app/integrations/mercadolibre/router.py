@@ -20,6 +20,8 @@ from app.integrations.mercadolibre.schemas import (
     MLAccountResponse,
     MLWebhookNotification,
     MLWebhookProcessResponse,
+    MLImportRequest,
+    MLImportResult,
 )
 
 router = APIRouter(prefix="/integrations/ml", tags=["MercadoLibre"])
@@ -118,6 +120,19 @@ async def ml_webhook_receiver(
 ):
     """Public webhook receiver for Mercado Libre notifications."""
     result = await service.process_webhook_notification(db, body.dict())
+    await db.commit()
+    return result
+
+
+@router.post("/import", response_model=MLImportResult)
+async def import_ml_orders(
+    body: MLImportRequest,
+    user: User = Depends(require_any),
+    db: AsyncSession = Depends(get_db),
+):
+    """Manually import ML orders for a given date range."""
+    check_tenant_access(user, body.client_id)
+    result = await service.import_orders_from_ml(db, body.client_id, body.date_from, body.date_to, user)
     await db.commit()
     return result
 

@@ -1,5 +1,5 @@
 from pydantic import BaseModel
-from datetime import datetime
+from datetime import date, datetime
 
 
 class MLMappingCreate(BaseModel):
@@ -78,3 +78,18 @@ class MLWebhookProcessResponse(BaseModel):
     action: str
     detail: str
     order_id: int | None = None
+
+
+class MLImportRequest(BaseModel):
+    client_id: int
+    date_from: date
+    date_to: date
+
+
+class MLImportResult(BaseModel):
+    total_found: int
+    imported: int
+    skipped_duplicate: int
+    skipped_other: int
+    failed: int
+    errors: list[str]

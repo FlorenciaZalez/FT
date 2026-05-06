@@ -5,6 +5,8 @@ import {
   createMLMapping,
   deleteMLMapping,
   fetchMLMappings,
+  importMLOrders,
+  type MLImportResult,
   type MLMapping,
   type MLMappingCreateResult,
 } from '../services/mercadolibre';
@@ -23,6 +25,12 @@ export default function MercadoLibreMappings() {
   const [toastMessage, setToastMessage] = useState('');
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [resolvingOrder, setResolvingOrder] = useState<Order | null>(null);
+  const [importClientId, setImportClientId] = useState('');
+  const [importDateFrom, setImportDateFrom] = useState('');
+  const [importDateTo, setImportDateTo] = useState('');
+  const [importing, setImporting] = useState(false);
+  const [importResult, setImportResult] = useState<MLImportResult | null>(null);
+  const [importError, setImportError] = useState('');
 
   const search = searchParams.get('q') ?? '';
 
@@ -82,6 +90,29 @@ export default function MercadoLibreMappings() {
     }
   };
 
+  const handleImport = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!importClientId || !importDateFrom || !importDateTo) {
+      setImportError('Seleccioná cliente y rango de fechas.');
+      return;
+    }
+    setImporting(true);
+    setImportResult(null);
+    setImportError('');
+    try {
+      const result = await importMLOrders(Number(importClientId), importDateFrom, importDateTo);
+      setImportResult(result);
+      if (result.imported > 0) {
+        loadData().catch(() => {});
+      }
+    } catch (err: unknown) {
+      const message = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail ?? 'No se pudo importar.';
+      setImportError(message);
+    } finally {
+      setImporting(false);
+    }
+  };
+
   return (
     <div className="flex flex-col gap-6">
       <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
@@ -106,6 +137,136 @@ export default function MercadoLibreMappings() {
         <SummaryCard label="Pedidos sin mapping" value={String(unmappedOrders.length)} tone="amber" />
         <SummaryCard label="Clientes con ML" value={String(new Set(mappings.map((item) => item.client_id)).size)} tone="emerald" />
       </div>
+
+      <section className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+        <div className="px-6 py-4 border-b border-gray-200">
+          <h2 className="text-lg font-bold text-gray-900">Importar pedidos de MercadoLibre</h2>
+          <p className="text-sm text-gray-500 mt-1">Recuperá manualmente las ventas de un período en caso de haber perdido notificaciones.</p>
+        </div>
+        <div className="p-6">
+          <form onSubmit={(event) => { handleImport(event).catch(() => {}); }} className="flex flex-col gap-4 sm:flex-row sm:items-end sm:gap-3">
+            <div className="flex-1">
+              <label className="block text-xs font-medium text-gray-700 mb-1">Cliente</label>
+              <select
+                value={importClientId}
+                onChange={(e) => setImportClientId(e.target.value)}
+                className="w-full px-4 py-2.5 border border-gray-200 rounded-lg bg-white text-sm"
+              >
+                <option value="">Seleccionar cliente...</option>
+                {clients.filter((c) => c.is_active).map((c) => (
+                  <option key={c.id} value={c.id}>{c.name}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">Desde</label>
+              <input
+                type="date"
+                value={importDateFrom}
+                onChange={(e) => setImportDateFrom(e.target.value)}
+                className="px-4 py-2.5 border border-gray-200 rounded-lg text-sm"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">Hasta</label>
+              <input
+                type="date"
+                value={importDateTo}
+                onChange={(e) => setImportDateTo(e.target.value)}
+                className="px-4 py-2.5 border border-gray-200 rounded-lg text-sm"
+              />
+            </div>
+            <button
+              type="submit"
+              disabled={importing}
+              className="ui-btn-primary px-4 py-2.5 rounded-lg text-sm font-medium disabled:opacity-50 whitespace-nowrap"
+            >
+              {importing ? 'Importando...' : 'Importar pedidos'}
+            </button>
+          </form>
+          {importError && <div className="mt-3 bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg p-3">{importError}</div>}
+          {importResult && (
+            <div className="mt-3 bg-green-50 border border-green-200 rounded-lg p-4 text-sm">
+              <div className="font-semibold text-green-800 mb-1">
+                Importación completada — {importResult.imported} pedido{importResult.imported !== 1 ? 's' : ''} nuevo{importResult.imported !== 1 ? 's' : ''}
+              </div>
+              <div className="text-green-700">
+                Encontrados en ML: {importResult.total_found} · Ya existían: {importResult.skipped_duplicate} · Errores: {importResult.failed}
+              </div>
+              {importResult.errors.length > 0 && (
+                <ul className="mt-2 text-red-700 text-xs space-y-0.5">
+                  {importResult.errors.map((err, i) => <li key={i}>• {err}</li>)}
+                </ul>
+              )}
+            </div>
+          )}
+        </div>
+      </section>
+
+      <section className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+        <div className="px-6 py-4 border-b border-gray-200">
+          <h2 className="text-lg font-bold text-gray-900">Importar pedidos de MercadoLibre</h2>
+          <p className="text-sm text-gray-500 mt-1">Recuperá manualmente las ventas de un período en caso de haber perdido notificaciones.</p>
+        </div>
+        <div className="p-6">
+          <form onSubmit={(event) => { handleImport(event).catch(() => {}); }} className="flex flex-col gap-4 sm:flex-row sm:items-end sm:gap-3">
+            <div className="flex-1">
+              <label className="block text-xs font-medium text-gray-700 mb-1">Cliente</label>
+              <select
+                value={importClientId}
+                onChange={(e) => setImportClientId(e.target.value)}
+                className="w-full px-4 py-2.5 border border-gray-200 rounded-lg bg-white text-sm"
+              >
+                <option value="">Seleccionar cliente...</option>
+                {clients.filter((c) => c.is_active).map((c) => (
+                  <option key={c.id} value={c.id}>{c.name}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">Desde</label>
+              <input
+                type="date"
+                value={importDateFrom}
+                onChange={(e) => setImportDateFrom(e.target.value)}
+                className="px-4 py-2.5 border border-gray-200 rounded-lg text-sm"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">Hasta</label>
+              <input
+                type="date"
+                value={importDateTo}
+                onChange={(e) => setImportDateTo(e.target.value)}
+                className="px-4 py-2.5 border border-gray-200 rounded-lg text-sm"
+              />
+            </div>
+            <button
+              type="submit"
+              disabled={importing}
+              className="ui-btn-primary px-4 py-2.5 rounded-lg text-sm font-medium disabled:opacity-50 whitespace-nowrap"
+            >
+              {importing ? 'Importando...' : 'Importar pedidos'}
+            </button>
+          </form>
+          {importError && <div className="mt-3 bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg p-3">{importError}</div>}
+          {importResult && (
+            <div className="mt-3 bg-green-50 border border-green-200 rounded-lg p-4 text-sm">
+              <div className="font-semibold text-green-800 mb-1">
+                Importación completada — {importResult.imported} pedido{importResult.imported !== 1 ? 's' : ''} nuevo{importResult.imported !== 1 ? 's' : ''}
+              </div>
+              <div className="text-green-700">
+                Encontrados en ML: {importResult.total_found} · Ya existían: {importResult.skipped_duplicate} · Errores: {importResult.failed}
+              </div>
+              {importResult.errors.length > 0 && (
+                <ul className="mt-2 text-red-700 text-xs space-y-0.5">
+                  {importResult.errors.map((err, i) => <li key={i}>• {err}</li>)}
+                </ul>
+              )}
+            </div>
+          )}
+        </div>
+      </section>
 
       <section className="bg-white rounded-xl border border-gray-200 overflow-hidden">
         <div className="px-6 py-4 border-b border-gray-200 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
