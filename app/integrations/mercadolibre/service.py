@@ -807,6 +807,32 @@ async def _ingest_ml_order_data(
     )
     existing_order = existing_result.scalar_one_or_none()
     if existing_order is not None:
+        if existing_order.mapping_status == "unmapped" and existing_order.ml_item_id and existing_order.requested_quantity:
+            mapped_product = await resolve_ml_to_product(
+                db,
+                account.client_id,
+                existing_order.ml_item_id,
+                existing_order.ml_variation_id,
+            )
+            if mapped_product is not None:
+                await orders_service.resolve_marketplace_order_mapping(
+                    db,
+                    existing_order.id,
+                    webhook_actor,
+                    mapped_product.id,
+                )
+                logger.info(
+                    "[ML][IMPORT] Reconciled existing unmapped order %s as order_id=%s using product_id=%s",
+                    order_external_id,
+                    existing_order.id,
+                    mapped_product.id,
+                )
+                return {
+                    "processed": True,
+                    "action": "reconciled",
+                    "detail": "La orden existente fue reconciliada con el mapping actual",
+                    "order_id": existing_order.id,
+                }
         logger.debug("[ML][IMPORT] Duplicate: order %s already exists as order_id=%s", order_external_id, existing_order.id)
         return {"processed": False, "action": "duplicate", "detail": "La orden ya existe en el sistema", "order_id": existing_order.id}
 

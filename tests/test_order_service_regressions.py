@@ -41,6 +41,35 @@ class _AsyncContextManager:
 
 
 class OrderServiceRegressionTests(unittest.IsolatedAsyncioTestCase):
+    async def test_import_duplicate_ml_order_reconciles_existing_unmapped_order(self) -> None:
+        existing_order = SimpleNamespace(
+            id=77,
+            mapping_status=order_service.MAPPING_STATUS_UNMAPPED,
+            ml_item_id="MLA123456",
+            ml_variation_id="",
+            requested_quantity=1,
+        )
+        account = SimpleNamespace(client_id=7)
+        user = SimpleNamespace(id=9)
+        mapped_product = SimpleNamespace(id=15)
+        db = _FakeDb(execute_results=[SimpleNamespace(scalar_one_or_none=lambda: existing_order)])
+
+        with (
+            patch("app.integrations.mercadolibre.service.fetch_order_detail", AsyncMock(return_value=None)),
+            patch("app.integrations.mercadolibre.service.resolve_ml_to_product", AsyncMock(return_value=mapped_product)),
+            patch("app.orders.service.resolve_marketplace_order_mapping", AsyncMock(return_value={"id": existing_order.id})) as reconcile_order,
+        ):
+            result = await mercadolibre_service._ingest_ml_order_data(
+                db,
+                account,
+                {"id": "ML-ORDER-1"},
+                user,
+            )
+
+        reconcile_order.assert_awaited_once_with(db, existing_order.id, user, mapped_product.id)
+        self.assertEqual(result["action"], "reconciled")
+        self.assertTrue(result["processed"])
+
     async def test_resolve_ml_to_product_treats_blank_variation_as_none(self) -> None:
         product = SimpleNamespace(id=55)
         mapping = SimpleNamespace(product_id=product.id, ml_variation_id="")
