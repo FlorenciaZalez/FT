@@ -4,7 +4,7 @@ import logging
 import re
 
 import httpx
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
@@ -72,6 +72,14 @@ def normalize_ml_item_ids(raw_value: str | None) -> list[str]:
         raise BadRequestError(ML_ITEM_FORMAT_ERROR)
 
     return normalized
+
+
+def normalize_ml_variation_id(raw_value: str | None) -> str | None:
+    if raw_value is None:
+        return None
+
+    value = str(raw_value).strip()
+    return value or None
 
 
 # ─── OAuth helpers ────────────────────────────────────────────────
@@ -323,6 +331,8 @@ async def create_mapping(db: AsyncSession, user: User, data: dict) -> dict:
     if normalized_item_id is None:
         raise BadRequestError("ml_item_id is required")
 
+    normalized_variation_id = normalize_ml_variation_id(data.get("ml_variation_id"))
+
     await _validate_ml_item_for_client(db, client_id, normalized_item_id)
 
     # Verify product exists and belongs to tenant
@@ -336,7 +346,7 @@ async def create_mapping(db: AsyncSession, user: User, data: dict) -> dict:
         select(MLProductMapping).where(
             MLProductMapping.client_id == client_id,
             MLProductMapping.ml_item_id == normalized_item_id,
-            MLProductMapping.ml_variation_id == data.get("ml_variation_id"),
+            MLProductMapping.ml_variation_id == normalized_variation_id,
         )
     )
     if existing.scalar_one_or_none():
@@ -346,7 +356,7 @@ async def create_mapping(db: AsyncSession, user: User, data: dict) -> dict:
         client_id=client_id,
         product_id=data["product_id"],
         ml_item_id=normalized_item_id,
-        ml_variation_id=data.get("ml_variation_id"),
+        ml_variation_id=normalized_variation_id,
         ml_account_id=data.get("ml_account_id"),
     )
     db.add(mapping)
@@ -395,10 +405,10 @@ def _normalize_order_item_payload(order_item: dict) -> dict | None:
     if normalized_ml_item_id is None:
         return None
 
-    variation_id = order_item.get("variation_id")
+    variation_id = normalize_ml_variation_id(order_item.get("variation_id"))
     return {
         "ml_item_id": normalized_ml_item_id,
-        "variation_id": str(variation_id) if variation_id is not None else None,
+        "variation_id": variation_id,
         "quantity": max(int(order_item.get("quantity") or 1), 1),
     }
 
@@ -1013,9 +1023,11 @@ async def update_mapping(db: AsyncSession, mapping_id: int, user: User, data: di
 
     if "ml_item_id" in data:
         data["ml_item_id"] = normalize_ml_item_id(data.get("ml_item_id"))
+    if "ml_variation_id" in data:
+        data["ml_variation_id"] = normalize_ml_variation_id(data.get("ml_variation_id"))
 
     next_item_id = data.get("ml_item_id", mapping.ml_item_id)
-    next_variation_id = data.get("ml_variation_id", mapping.ml_variation_id)
+    next_variation_id = normalize_ml_variation_id(data.get("ml_variation_id", mapping.ml_variation_id))
     await _validate_ml_item_for_client(db, mapping.client_id, next_item_id)
     duplicate = await db.execute(
         select(MLProductMapping).where(
@@ -1060,6 +1072,8 @@ async def upsert_mapping(
     if normalized_item_id is None:
         raise BadRequestError("ml_item_id is required")
 
+    normalized_variation_id = normalize_ml_variation_id(ml_variation_id)
+
     await _validate_ml_item_for_client(db, client_id, normalized_item_id)
 
     product = await db.get(Product, product_id)
@@ -1071,7 +1085,7 @@ async def upsert_mapping(
         select(MLProductMapping).where(
             MLProductMapping.client_id == client_id,
             MLProductMapping.ml_item_id == normalized_item_id,
-            MLProductMapping.ml_variation_id == ml_variation_id,
+            MLProductMapping.ml_variation_id == normalized_variation_id,
         )
     )
     mapping = result.scalar_one_or_none()
@@ -1080,7 +1094,7 @@ async def upsert_mapping(
             client_id=client_id,
             product_id=product_id,
             ml_item_id=normalized_item_id,
-            ml_variation_id=ml_variation_id,
+            ml_variation_id=normalized_variation_id,
             ml_account_id=ml_account_id,
             is_active=True,
         )
@@ -1103,6 +1117,8 @@ async def resolve_ml_to_product(
     if normalized_item_id is None:
         return None
 
+    normalized_variation_id = normalize_ml_variation_id(ml_variation_id)
+
     query = select(MLProductMapping).where(
         MLProductMapping.client_id == client_id,
         MLProductMapping.ml_item_id == normalized_item_id,
@@ -1112,10 +1128,24 @@ async def resolve_ml_to_product(
     result = await db.execute(query)
     mappings = list(result.scalars().all())
     mapping = None
-    if ml_variation_id is not None:
-        mapping = next((item for item in mappings if item.ml_variation_id == ml_variation_id), None)
+    if normalized_variation_id is not None:
+        mapping = next(
+            (
+                item
+                for item in mappings
+                if normalize_ml_variation_id(item.ml_variation_id) == normalized_variation_id
+            ),
+            None,
+        )
     if mapping is None:
-        mapping = next((item for item in mappings if item.ml_variation_id is None), None)
+        mapping = next(
+            (
+                item
+                for item in mappings
+                if normalize_ml_variation_id(item.ml_variation_id) is None
+            ),
+            None,
+        )
     if mapping is None:
         return None
     return await db.get(Product, mapping.product_id)

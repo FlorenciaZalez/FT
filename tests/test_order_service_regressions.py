@@ -2,6 +2,7 @@ import unittest
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
+from app.integrations.mercadolibre import service as mercadolibre_service
 from app.orders import service as order_service
 from app.orders.models import OrderOperationType, OrderStatus
 
@@ -20,6 +21,7 @@ class _ScalarResult:
 class _FakeDb:
     def __init__(self, execute_results=None):
         self.execute = AsyncMock(side_effect=execute_results or [])
+        self.delete = AsyncMock()
         self.flush = AsyncMock()
         self.refresh = AsyncMock()
         self.added = []
@@ -30,7 +32,55 @@ class _FakeDb:
         self.added.append(value)
 
 
+class _AsyncContextManager:
+    async def __aenter__(self):
+        return None
+
+    async def __aexit__(self, exc_type, exc, tb):
+        return False
+
+
 class OrderServiceRegressionTests(unittest.IsolatedAsyncioTestCase):
+    async def test_resolve_ml_to_product_treats_blank_variation_as_none(self) -> None:
+        product = SimpleNamespace(id=55)
+        mapping = SimpleNamespace(product_id=product.id, ml_variation_id="")
+        db = _FakeDb(execute_results=[_ScalarResult([mapping])])
+        db.get = AsyncMock(return_value=product)
+
+        resolved = await mercadolibre_service.resolve_ml_to_product(
+            db,
+            client_id=7,
+            ml_item_id="MLA123456",
+            ml_variation_id=None,
+        )
+
+        self.assertIs(resolved, product)
+
+    async def test_reconcile_unmapped_orders_matches_blank_variation_legacy_data(self) -> None:
+        user = SimpleNamespace(id=9)
+        mapping = SimpleNamespace(id=5, client_id=7, product_id=13, ml_item_id="MLA123456", ml_variation_id="")
+        order = SimpleNamespace(
+            id=88,
+            items=[],
+            requested_quantity=2,
+            mapping_status=order_service.MAPPING_STATUS_UNMAPPED,
+        )
+        db = _FakeDb(execute_results=[_ScalarResult([order]), _ScalarResult([])])
+        db.begin_nested = lambda: _AsyncContextManager()
+
+        with (
+            patch("app.orders.service._resolve_product_and_location", AsyncMock(return_value=(SimpleNamespace(id=13), "A-1"))),
+            patch("app.orders.service._create_order_item", AsyncMock()),
+            patch("app.orders.service._compute_dominant_zone", return_value=None),
+            patch("app.orders.service.shipping_service.calculate_shipping", AsyncMock()),
+            patch("app.orders.service.stock_service.release_stock", AsyncMock()),
+        ):
+            resolved_count = await order_service.reconcile_unmapped_orders_for_mapping(db, user, mapping)
+
+        stmt = db.execute.await_args_list[0].args[0]
+        self.assertIn("orders.ml_variation_id IS NULL OR orders.ml_variation_id =", str(stmt))
+        self.assertEqual(resolved_count, 1)
+
     async def test_cancel_prepared_order_removes_preparation_record(self) -> None:
         order = SimpleNamespace(
             id=99,

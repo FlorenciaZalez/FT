@@ -1293,8 +1293,16 @@ async def reconcile_unmapped_orders_for_mapping(
             Order.ml_item_id == mapping.ml_item_id,
         )
     )
-    if mapping.ml_variation_id is not None:
-        query = query.where(Order.ml_variation_id == mapping.ml_variation_id)
+    normalized_variation_id = mercadolibre_service.normalize_ml_variation_id(mapping.ml_variation_id)
+    if normalized_variation_id is not None:
+        query = query.where(Order.ml_variation_id == normalized_variation_id)
+    else:
+        query = query.where(
+            or_(
+                Order.ml_variation_id.is_(None),
+                Order.ml_variation_id == "",
+            )
+        )
 
     result = await db.execute(query.order_by(Order.created_at.asc()))
     orders = list(result.scalars().all())
