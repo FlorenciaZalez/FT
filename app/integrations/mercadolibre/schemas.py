@@ -89,7 +89,9 @@ class MLImportRequest(BaseModel):
 class MLImportResult(BaseModel):
     total_found: int
     imported: int
+    reconciled: int
     skipped_duplicate: int
     skipped_other: int
     failed: int
+    diagnostics: list[str]
     errors: list[str]

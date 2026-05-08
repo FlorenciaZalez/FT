@@ -102,7 +102,7 @@ export default function MercadoLibreMappings() {
     try {
       const result = await importMLOrders(Number(importClientId), importDateFrom, importDateTo);
       setImportResult(result);
-      if (result.imported > 0 || result.skipped_other > 0) {
+      if (result.imported > 0 || result.reconciled > 0 || result.skipped_other > 0) {
         loadData().catch(() => {});
       }
     } catch (err: unknown) {
@@ -191,8 +191,13 @@ export default function MercadoLibreMappings() {
                 Importación completada — {importResult.imported} pedido{importResult.imported !== 1 ? 's' : ''} nuevo{importResult.imported !== 1 ? 's' : ''}
               </div>
               <div className="text-green-700">
-                Encontrados en ML: {importResult.total_found} · Ya existían: {importResult.skipped_duplicate} · Errores: {importResult.failed}
+                Encontrados en ML: {importResult.total_found} · Reconciliados: {importResult.reconciled} · Ya existían: {importResult.skipped_duplicate} · Errores: {importResult.failed}
               </div>
+              {importResult.diagnostics.length > 0 && (
+                <ul className="mt-2 text-amber-700 text-xs space-y-0.5">
+                  {importResult.diagnostics.map((message, i) => <li key={i}>• {message}</li>)}
+                </ul>
+              )}
               {importResult.errors.length > 0 && (
                 <ul className="mt-2 text-red-700 text-xs space-y-0.5">
                   {importResult.errors.map((err, i) => <li key={i}>• {err}</li>)}

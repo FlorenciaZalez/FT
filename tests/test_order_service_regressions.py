@@ -118,6 +118,43 @@ class OrderServiceRegressionTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(existing_order.requested_quantity, 3)
         self.assertEqual(result["action"], "reconciled")
 
+    async def test_import_duplicate_ml_order_reports_unresolved_mapping_diagnostic(self) -> None:
+        existing_order = SimpleNamespace(
+            id=79,
+            mapping_status=order_service.MAPPING_STATUS_UNMAPPED,
+            ml_item_id=None,
+            ml_variation_id=None,
+            requested_quantity=None,
+        )
+        account = SimpleNamespace(client_id=7)
+        user = SimpleNamespace(id=9)
+        db = _FakeDb(execute_results=[SimpleNamespace(scalar_one_or_none=lambda: existing_order)])
+
+        with (
+            patch("app.integrations.mercadolibre.service.fetch_order_detail", AsyncMock(return_value=None)),
+            patch("app.integrations.mercadolibre.service.resolve_ml_to_product", AsyncMock(return_value=None)),
+            patch("app.orders.service.resolve_marketplace_order_mapping", AsyncMock()) as reconcile_order,
+        ):
+            result = await mercadolibre_service._ingest_ml_order_data(
+                db,
+                account,
+                {
+                    "id": "ML-ORDER-3",
+                    "order_items": [
+                        {
+                            "item": {"id": "MLA177751462"},
+                            "variation_id": None,
+                            "quantity": 1,
+                        }
+                    ],
+                },
+                user,
+            )
+
+        reconcile_order.assert_not_awaited()
+        self.assertEqual(result["action"], "unresolved_duplicate")
+        self.assertIn("MLA177751462", result["detail"])
+
     async def test_resolve_ml_to_product_treats_blank_variation_as_none(self) -> None:
         product = SimpleNamespace(id=55)
         mapping = SimpleNamespace(product_id=product.id, ml_variation_id="")

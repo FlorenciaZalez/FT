@@ -870,6 +870,18 @@ async def _ingest_ml_order_data(
                     "detail": "La orden existente fue reconciliada con el mapping actual",
                     "order_id": existing_order.id,
                 }
+            diagnostic_item = candidate_items[0] if candidate_items else (normalized_items[0] if normalized_items else None)
+            item_label = diagnostic_item["ml_item_id"] if diagnostic_item else "sin ml_item_id"
+            variation_label = diagnostic_item["variation_id"] if diagnostic_item and diagnostic_item["variation_id"] else "sin variacion"
+            return {
+                "processed": False,
+                "action": "unresolved_duplicate",
+                "detail": (
+                    f"Pedido existente {existing_order.id} sigue sin mapping para "
+                    f"{item_label} ({variation_label})."
+                ),
+                "order_id": existing_order.id,
+            }
         logger.debug("[ML][IMPORT] Duplicate: order %s already exists as order_id=%s", order_external_id, existing_order.id)
         return {"processed": False, "action": "duplicate", "detail": "La orden ya existe en el sistema", "order_id": existing_order.id}
 
@@ -986,9 +998,11 @@ async def import_orders_from_ml(
 
     total_found = 0
     imported = 0
+    reconciled = 0
     skipped_duplicate = 0
     skipped_other = 0
     failed = 0
+    diagnostics: list[str] = []
     errors: list[str] = []
 
     limit = 50
@@ -1026,10 +1040,18 @@ async def import_orders_from_ml(
                     result = await _ingest_ml_order_data(db, account, order_data, webhook_actor)
                     if result["action"] == "created":
                         imported += 1
+                    elif result["action"] == "reconciled":
+                        reconciled += 1
+                    elif result["action"] == "unresolved_duplicate":
+                        skipped_other += 1
+                        diagnostics.append(result["detail"])
                     elif result["action"] == "duplicate":
                         skipped_duplicate += 1
                     else:
                         skipped_other += 1
+                        detail = result.get("detail")
+                        if detail:
+                            diagnostics.append(detail)
                 except Exception as exc:
                     failed += 1
                     errors.append(f"Orden {order_data.get('id', '?')}: {str(exc)}")
@@ -1040,16 +1062,18 @@ async def import_orders_from_ml(
                 break
 
     logger.info(
-        "[ML][IMPORT] Done client_id=%s: total=%s imported=%s duplicate=%s other=%s failed=%s",
-        client_id, total_found, imported, skipped_duplicate, skipped_other, failed,
+        "[ML][IMPORT] Done client_id=%s: total=%s imported=%s reconciled=%s duplicate=%s other=%s failed=%s",
+        client_id, total_found, imported, reconciled, skipped_duplicate, skipped_other, failed,
     )
 
     return {
         "total_found": total_found,
         "imported": imported,
+        "reconciled": reconciled,
         "skipped_duplicate": skipped_duplicate,
         "skipped_other": skipped_other,
         "failed": failed,
+        "diagnostics": diagnostics,
         "errors": errors,
     }
 

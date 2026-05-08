@@ -81,9 +81,11 @@ export async function deleteMLMapping(id: number): Promise<void> {
 export interface MLImportResult {
   total_found: number;
   imported: number;
+  reconciled: number;
   skipped_duplicate: number;
   skipped_other: number;
   failed: number;
+  diagnostics: string[];
   errors: string[];
 }
 
