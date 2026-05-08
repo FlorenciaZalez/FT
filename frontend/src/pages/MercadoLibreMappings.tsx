@@ -102,7 +102,7 @@ export default function MercadoLibreMappings() {
     try {
       const result = await importMLOrders(Number(importClientId), importDateFrom, importDateTo);
       setImportResult(result);
-      if (result.imported > 0) {
+      if (result.imported > 0 || result.skipped_other > 0) {
         loadData().catch(() => {});
       }
     } catch (err: unknown) {

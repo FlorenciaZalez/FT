@@ -62,13 +62,61 @@ class OrderServiceRegressionTests(unittest.IsolatedAsyncioTestCase):
             result = await mercadolibre_service._ingest_ml_order_data(
                 db,
                 account,
-                {"id": "ML-ORDER-1"},
+                {
+                    "id": "ML-ORDER-1",
+                    "order_items": [
+                        {
+                            "item": {"id": "MLA123456"},
+                            "variation_id": None,
+                            "quantity": 1,
+                        }
+                    ],
+                },
                 user,
             )
 
         reconcile_order.assert_awaited_once_with(db, existing_order.id, user, mapped_product.id)
         self.assertEqual(result["action"], "reconciled")
         self.assertTrue(result["processed"])
+
+    async def test_import_duplicate_ml_order_uses_fresh_ml_item_when_legacy_order_is_incomplete(self) -> None:
+        existing_order = SimpleNamespace(
+            id=78,
+            mapping_status=order_service.MAPPING_STATUS_UNMAPPED,
+            ml_item_id=None,
+            ml_variation_id=None,
+            requested_quantity=None,
+        )
+        account = SimpleNamespace(client_id=7)
+        user = SimpleNamespace(id=9)
+        mapped_product = SimpleNamespace(id=15)
+        db = _FakeDb(execute_results=[SimpleNamespace(scalar_one_or_none=lambda: existing_order)])
+
+        with (
+            patch("app.integrations.mercadolibre.service.fetch_order_detail", AsyncMock(return_value=None)),
+            patch("app.integrations.mercadolibre.service.resolve_ml_to_product", AsyncMock(return_value=mapped_product)),
+            patch("app.orders.service.resolve_marketplace_order_mapping", AsyncMock(return_value={"id": existing_order.id})) as reconcile_order,
+        ):
+            result = await mercadolibre_service._ingest_ml_order_data(
+                db,
+                account,
+                {
+                    "id": "ML-ORDER-2",
+                    "order_items": [
+                        {
+                            "item": {"id": "MLA1764413833"},
+                            "variation_id": None,
+                            "quantity": 3,
+                        }
+                    ],
+                },
+                user,
+            )
+
+        reconcile_order.assert_awaited_once_with(db, existing_order.id, user, mapped_product.id)
+        self.assertEqual(existing_order.ml_item_id, "MLA1764413833")
+        self.assertEqual(existing_order.requested_quantity, 3)
+        self.assertEqual(result["action"], "reconciled")
 
     async def test_resolve_ml_to_product_treats_blank_variation_as_none(self) -> None:
         product = SimpleNamespace(id=55)

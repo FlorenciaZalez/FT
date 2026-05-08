@@ -798,6 +798,23 @@ async def _ingest_ml_order_data(
     if full_order_data is not None:
         order_data = full_order_data
 
+    order_items = order_data.get("order_items") or []
+    if not order_items:
+        logger.warning("[ML][IMPORT] Order %s has no items", order_external_id)
+        return {"processed": False, "action": "ignored", "detail": "Orden sin items", "order_id": None}
+
+    normalized_items = [
+        normalized_item
+        for order_item in order_items
+        if (normalized_item := _normalize_order_item_payload(order_item)) is not None
+    ]
+    if not normalized_items:
+        logger.warning(
+            "[ML][IMPORT] Order %s: could not extract valid ml_item_id from items: %s",
+            order_external_id, [oi.get("item", {}).get("id") for oi in order_items],
+        )
+        return {"processed": False, "action": "ignored", "detail": "No se encontro un ml_item_id valido en la orden", "order_id": None}
+
     existing_result = await db.execute(
         select(Order).where(
             Order.client_id == account.client_id,
@@ -807,14 +824,34 @@ async def _ingest_ml_order_data(
     )
     existing_order = existing_result.scalar_one_or_none()
     if existing_order is not None:
-        if existing_order.mapping_status == "unmapped" and existing_order.ml_item_id and existing_order.requested_quantity:
-            mapped_product = await resolve_ml_to_product(
-                db,
-                account.client_id,
-                existing_order.ml_item_id,
-                existing_order.ml_variation_id,
-            )
-            if mapped_product is not None:
+        if existing_order.mapping_status == "unmapped":
+            candidate_items: list[dict] = []
+            if existing_order.ml_item_id and existing_order.requested_quantity:
+                candidate_items.append(
+                    {
+                        "ml_item_id": existing_order.ml_item_id,
+                        "variation_id": existing_order.ml_variation_id,
+                        "quantity": existing_order.requested_quantity,
+                    }
+                )
+            if len(normalized_items) == 1:
+                candidate_items.append(normalized_items[0])
+
+            for candidate_item in candidate_items:
+                mapped_product = await resolve_ml_to_product(
+                    db,
+                    account.client_id,
+                    candidate_item["ml_item_id"],
+                    candidate_item["variation_id"],
+                )
+                if mapped_product is None:
+                    continue
+
+                existing_order.ml_item_id = candidate_item["ml_item_id"]
+                existing_order.ml_variation_id = candidate_item["variation_id"]
+                existing_order.requested_quantity = candidate_item["quantity"]
+                await db.flush()
+
                 await orders_service.resolve_marketplace_order_mapping(
                     db,
                     existing_order.id,
@@ -835,23 +872,6 @@ async def _ingest_ml_order_data(
                 }
         logger.debug("[ML][IMPORT] Duplicate: order %s already exists as order_id=%s", order_external_id, existing_order.id)
         return {"processed": False, "action": "duplicate", "detail": "La orden ya existe en el sistema", "order_id": existing_order.id}
-
-    order_items = order_data.get("order_items") or []
-    if not order_items:
-        logger.warning("[ML][IMPORT] Order %s has no items", order_external_id)
-        return {"processed": False, "action": "ignored", "detail": "Orden sin items", "order_id": None}
-
-    normalized_items = [
-        normalized_item
-        for order_item in order_items
-        if (normalized_item := _normalize_order_item_payload(order_item)) is not None
-    ]
-    if not normalized_items:
-        logger.warning(
-            "[ML][IMPORT] Order %s: could not extract valid ml_item_id from items: %s",
-            order_external_id, [oi.get("item", {}).get("id") for oi in order_items],
-        )
-        return {"processed": False, "action": "ignored", "detail": "No se encontro un ml_item_id valido en la orden", "order_id": None}
 
     shipping_data = _extract_shipping_address(order_data)
     if shipping_data["shipping_id"] and _shipping_address_is_missing(shipping_data):
