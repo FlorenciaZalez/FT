@@ -22,6 +22,7 @@ from app.transporters.router import router as transporters_router
 from app.orders.verify_router import router as dispatch_verify_router
 from app.billing.router import router as billing_router
 from app.shipping.router import router as shipping_router
+from app.reports.router import router as reports_router
 from app.config import get_settings
 from app.database import Base, engine
 
@@ -452,6 +453,7 @@ app.include_router(ml_router, prefix=API_PREFIX)
 app.include_router(dispatch_verify_router, prefix=API_PREFIX)
 app.include_router(billing_router, prefix=API_PREFIX)
 app.include_router(shipping_router, prefix=API_PREFIX)
+app.include_router(reports_router, prefix=API_PREFIX)
 
 
 # 🔥 AUTO ADMIN (FINAL)

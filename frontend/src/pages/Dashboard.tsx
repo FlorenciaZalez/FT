@@ -5,6 +5,7 @@ import {
   AlertTriangle,
   ArrowUpRight,
   Boxes,
+  Download,
   PackageCheck,
   RefreshCw,
   Truck,
@@ -25,6 +26,7 @@ import type { Order, WorkloadStatus } from '../services/orders';
 import { fetchStock, fetchStockMovements } from '../services/stock';
 import type { StockItem, StockMovement } from '../services/stock';
 import type { DashboardLayoutContext } from '../layouts/DashboardLayout';
+import ReportsModal from '../components/ReportsModal';
 
 const WORKLOAD_REFRESH_MS = 8_000;
 const CLIENT_REFRESH_MS = 20_000;
@@ -268,6 +270,7 @@ export default function Dashboard() {
   const [mlDisconnecting, setMlDisconnecting] = useState(false);
   const [clientLoading, setClientLoading] = useState(false);
   const [clientError, setClientError] = useState<string | null>(null);
+  const [showReportsModal, setShowReportsModal] = useState(false);
   const [clientSnapshot, setClientSnapshot] = useState<ClientDashboardSnapshot | null>(null);
   const [clientLastUpdatedAt, setClientLastUpdatedAt] = useState<Date | null>(null);
   const cancelledRef = useRef(false);
@@ -434,14 +437,24 @@ export default function Dashboard() {
                   <p className="text-xs uppercase tracking-[0.22em] text-gray-400">Actualizado</p>
                   <p className="mt-1 text-sm font-medium text-gray-900">{formatClock(clientLastUpdatedAt)}</p>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => { void loadClientSnapshot(); }}
-                  className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-gray-200 bg-white text-gray-500 hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700"
-                  aria-label="Actualizar dashboard"
-                >
-                  <RefreshCw size={16} className={clientLoading ? 'animate-spin' : ''} />
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowReportsModal(true)}
+                    className="inline-flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-900 hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700"
+                  >
+                    <Download size={16} />
+                    Exportar reportes
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { void loadClientSnapshot(); }}
+                    className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-gray-200 bg-white text-gray-500 hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700"
+                    aria-label="Actualizar dashboard"
+                  >
+                    <RefreshCw size={16} className={clientLoading ? 'animate-spin' : ''} />
+                  </button>
+                </div>
               </div>
             </div>
 
@@ -634,6 +647,10 @@ export default function Dashboard() {
             )}
           </div>
         </div>
+
+        {showReportsModal && (
+          <ReportsModal onClose={() => setShowReportsModal(false)} />
+        )}
       </div>
     );
   }

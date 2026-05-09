@@ -413,6 +413,44 @@ def _normalize_order_item_payload(order_item: dict) -> dict | None:
     }
 
 
+def _build_duplicate_reconciliation_candidates(
+    existing_order: Order,
+    normalized_items: list[dict],
+) -> list[dict]:
+    candidates: list[dict] = []
+    seen_keys: set[tuple[str, str | None, int]] = set()
+
+    def _push_candidate(ml_item_id: str | None, variation_id: str | None, quantity: int | None) -> None:
+        if not ml_item_id or quantity is None or quantity <= 0:
+            return
+        key = (ml_item_id, normalize_ml_variation_id(variation_id), quantity)
+        if key in seen_keys:
+            return
+        seen_keys.add(key)
+        candidates.append(
+            {
+                "ml_item_id": ml_item_id,
+                "variation_id": key[1],
+                "quantity": quantity,
+            }
+        )
+
+    _push_candidate(
+        existing_order.ml_item_id,
+        existing_order.ml_variation_id,
+        existing_order.requested_quantity,
+    )
+
+    for normalized_item in normalized_items:
+        _push_candidate(
+            normalized_item["ml_item_id"],
+            normalized_item["variation_id"],
+            normalized_item["quantity"],
+        )
+
+    return candidates
+
+
 def _extract_shipping_address(order_data: dict) -> dict:
     shipping = order_data.get("shipping") or {}
     receiver = shipping.get("receiver_address") or {}
@@ -825,17 +863,10 @@ async def _ingest_ml_order_data(
     existing_order = existing_result.scalar_one_or_none()
     if existing_order is not None:
         if existing_order.mapping_status == "unmapped":
-            candidate_items: list[dict] = []
-            if existing_order.ml_item_id and existing_order.requested_quantity:
-                candidate_items.append(
-                    {
-                        "ml_item_id": existing_order.ml_item_id,
-                        "variation_id": existing_order.ml_variation_id,
-                        "quantity": existing_order.requested_quantity,
-                    }
-                )
-            if len(normalized_items) == 1:
-                candidate_items.append(normalized_items[0])
+            candidate_items = _build_duplicate_reconciliation_candidates(
+                existing_order,
+                normalized_items,
+            )
 
             for candidate_item in candidate_items:
                 mapped_product = await resolve_ml_to_product(
