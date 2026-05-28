@@ -168,7 +168,6 @@ export default function BillingHistory() {
                   <tr className="bg-gray-50 border-b border-gray-200">
                     <th className="text-left px-6 py-3 font-medium text-gray-500">Cliente</th>
                     <th className="text-left px-4 py-3 font-medium text-gray-500">Período</th>
-                    <th className="text-right px-4 py-3 font-medium text-gray-500">m3 acumulados</th>
                     <th className="text-left px-4 py-3 font-medium text-gray-500">Vencimiento</th>
                     <th className="text-left px-4 py-3 font-medium text-gray-500">Estado</th>
                     <th className="text-right px-4 py-3 font-medium text-gray-500">Total</th>
@@ -180,7 +179,6 @@ export default function BillingHistory() {
                     <tr key={charge.id} className="border-b border-gray-200 last:border-b-0">
                       <td className="px-6 py-4 font-medium text-gray-900">{charge.client_name ?? `Cliente #${charge.client_id}`}</td>
                       <td className="px-4 py-4 text-gray-500">{charge.period}</td>
-                      <td className="px-4 py-4 text-right text-gray-500">{charge.accumulated_m3.toFixed(3)}</td>
                       <td className="px-4 py-4 text-gray-500">{new Date(charge.due_date).toLocaleDateString('es-AR')}</td>
                       <td className="px-4 py-4">
                         <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${getChargeStatusClasses(charge.status)}`}>

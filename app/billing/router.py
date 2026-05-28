@@ -9,6 +9,7 @@ from app.billing.schemas import (
     BillingDocumentResponse,
     BillingRatesResponse,
     BillingRatesUpdate,
+    StorageDailyReportResponse,
     ChargeResponse,
     ClientStorageRecordCreate,
     ClientStorageRecordResponse,
@@ -75,6 +76,16 @@ async def preview_billing(
     db: AsyncSession = Depends(get_db),
 ):
     return await service.preview_charges(db, user, period)
+
+
+@router.get("/storage-daily-report", response_model=StorageDailyReportResponse)
+async def get_storage_daily_report(
+    client_id: int = Query(..., ge=1),
+    period: str = Query(..., regex=r"^\d{4}-\d{2}$"),
+    user: User = Depends(require_any),
+    db: AsyncSession = Depends(get_db),
+):
+    return await service.get_storage_daily_report(db, user, client_id, period)
 
 
 @router.get("/storage-records", response_model=list[ClientStorageRecordResponse])

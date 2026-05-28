@@ -331,17 +331,16 @@ def _build_daily_storage_volumes(
     return daily_volumes
 
 
-async def _calculate_variable_storage_metrics(
+async def _build_variable_storage_daily_rows(
     db: AsyncSession,
     client_id: int,
     period: str,
-    storage_rate: Decimal,
-) -> tuple[Decimal, Decimal, Decimal, bool]:
+) -> tuple[Decimal, list[tuple[date, Decimal]], bool]:
     start, end = _parse_period(period)
     now = datetime.now(timezone.utc)
     effective_end = min(end, now)
     if effective_end <= start:
-        return Decimal("0.000"), Decimal("0.000"), Decimal("0.00"), False
+        return Decimal("0.000"), [], False
 
     quantity_rows = await db.execute(
         select(
@@ -412,7 +411,7 @@ async def _calculate_variable_storage_metrics(
 
     current_total_m3 = _total_volume_for_quantities(current_quantities, product_volumes)
     if missing_dimensions:
-        return current_total_m3, Decimal("0.000"), Decimal("0.00"), True
+        return current_total_m3, [], True
 
     last_day_of_month = (end - timedelta(days=1)).date()
     billable_end_day = min(effective_end.date(), last_day_of_month)
@@ -423,10 +422,96 @@ async def _calculate_variable_storage_metrics(
         start.date(),
         billable_end_day,
     )
+    daily_dates = [start.date() + timedelta(days=index) for index in range(len(daily_volumes))]
+    return current_total_m3, list(zip(daily_dates, daily_volumes)), False
+
+
+async def _calculate_variable_storage_metrics(
+    db: AsyncSession,
+    client_id: int,
+    period: str,
+    storage_rate: Decimal,
+) -> tuple[Decimal, Decimal, Decimal, bool]:
+    start, _ = _parse_period(period)
+    current_total_m3, daily_rows, missing_dimensions = await _build_variable_storage_daily_rows(db, client_id, period)
+    if missing_dimensions:
+        return current_total_m3, Decimal("0.000"), Decimal("0.00"), True
+
+    daily_volumes = [volume for _, volume in daily_rows]
     days_in_month = monthrange(start.year, start.month)[1]
     accumulated_m3 = _accumulate_storage_volume_for_daily_volumes(daily_volumes)
     storage_amount = _calculate_storage_amount_from_daily_volumes(daily_volumes, storage_rate, days_in_month)
     return current_total_m3, accumulated_m3, storage_amount, False
+
+
+async def get_storage_daily_report(
+    db: AsyncSession,
+    user: User,
+    client_id: int,
+    period: str,
+) -> dict:
+    client = await db.get(Client, client_id)
+    if client is None:
+        raise NotFoundError(f"Client {client_id} not found")
+    check_tenant_access(user, client.id)
+
+    validated_period = _validate_period_string(period)
+    global_rates = await _get_or_create_global_rates(db)
+    override = (
+        await db.execute(select(ClientRates).where(ClientRates.client_id == client.id))
+    ).scalar_one_or_none()
+    storage_base_rate = _to_decimal(global_rates.storage_per_m3)
+    storage_discount_pct = _to_decimal(override.storage_discount_pct if override and override.storage_discount_pct is not None else 0)
+    storage_rate = _apply_discount(storage_base_rate, storage_discount_pct)
+    start, _ = _parse_period(validated_period)
+    days_in_month = monthrange(start.year, start.month)[1]
+    daily_rate_per_m3 = _to_decimal(storage_rate / Decimal(days_in_month), FOURPLACES)
+
+    if client.variable_storage_enabled:
+        current_m3, daily_rows, missing_storage = await _build_variable_storage_daily_rows(db, client.id, validated_period)
+        if missing_storage:
+            raise BadRequestError("Faltan datos de almacenamiento para este cliente en el período seleccionado")
+        rows = [
+            {
+                "date": row_date,
+                "volume_m3": float(_to_decimal(volume, THREEPLACES)),
+                "amount": float(_to_decimal(_to_decimal(volume, THREEPLACES) * daily_rate_per_m3)),
+            }
+            for row_date, volume in daily_rows
+        ]
+        storage_total = _to_decimal(sum(Decimal(str(item["amount"])) for item in rows), TWOPLACES)
+    else:
+        record = (
+            await db.execute(
+                select(ClientStorageRecord).where(
+                    ClientStorageRecord.client_id == client.id,
+                    ClientStorageRecord.period == validated_period,
+                )
+            )
+        ).scalar_one_or_none()
+        current_m3 = _to_decimal(record.storage_m3 if record else 0, THREEPLACES)
+        rows = [
+            {
+                "date": (start.date() + timedelta(days=index)),
+                "volume_m3": float(current_m3),
+                "amount": float(_to_decimal(current_m3 * daily_rate_per_m3)),
+            }
+            for index in range(days_in_month)
+        ]
+        storage_total = _to_decimal(sum(Decimal(str(item["amount"])) for item in rows), TWOPLACES)
+
+    return {
+        "client_id": client.id,
+        "client_name": client.name,
+        "period": validated_period,
+        "current_m3": float(_to_decimal(current_m3, THREEPLACES)),
+        "storage_base_rate": float(storage_base_rate),
+        "storage_discount_pct": float(storage_discount_pct),
+        "storage_rate": float(storage_rate),
+        "daily_rate_per_m3": float(daily_rate_per_m3),
+        "storage_total": float(storage_total),
+        "rows": rows,
+    }
 
 
 def _serialize_product_creation_record(record: ProductCreationRecord, client_name: str | None = None) -> dict:

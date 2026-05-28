@@ -1,5 +1,5 @@
 import { jsPDF } from 'jspdf';
-import type { BillingDocument, BillingPreviewItem, Charge } from '../services/billing';
+import type { BillingDocument, BillingPreviewItem, Charge, StorageDailyReport } from '../services/billing';
 import { formatCurrency, getChargeStatusLabel } from './billingFormat';
 
 const COMPANY_NAME = 'Topix Fulfillment';
@@ -72,7 +72,7 @@ export function downloadChargesPdf(charges: Charge[], title: string, filePrefix 
     doc.text(`Vencimiento: ${new Date(charge.due_date).toLocaleDateString('es-AR')}`, margin + 55, cursorY + 14);
     doc.text(`Estado: ${getChargeStatusLabel(charge.status)}`, margin + 108, cursorY + 14);
 
-    doc.text(`Almacenamiento: ${formatCurrency(charge.storage_amount)} (${charge.accumulated_m3.toFixed(3)} m3 acumulados / ${charge.total_m3.toFixed(3)} m3 actuales / base ${formatCurrency(charge.base_storage_rate)} / desc ${charge.storage_discount_pct}%)`, margin + 4, cursorY + 22);
+    doc.text(`Almacenamiento: ${formatCurrency(charge.storage_amount)} (${charge.total_m3.toFixed(3)} m3 actuales / tarifa ${formatCurrency(charge.applied_storage_rate)} / desc ${charge.storage_discount_pct}%)`, margin + 4, cursorY + 22);
     doc.text(`Preparacion: ${formatCurrency(charge.preparation_amount)} (primer producto ${formatCurrency(charge.base_preparation_rate)} / adicional ${formatCurrency(charge.applied_preparation_rate)})`, margin + 4, cursorY + 27);
     doc.text(`Alta producto: ${formatCurrency(charge.product_creation_amount)}`, margin + 4, cursorY + 32);
     doc.text(`Traslados a transporte: ${formatCurrency(charge.transport_dispatch_amount)}`, margin + 4, cursorY + 37);
@@ -112,8 +112,8 @@ export async function downloadBillingDocumentPdf(document: BillingDocument, prev
       label: 'Storage',
       amount: document.storage_total,
       detail: preview
-        ? `${preview.accumulated_m3.toLocaleString('es-AR', { minimumFractionDigits: 3, maximumFractionDigits: 3 })} m3 acumulados · ${preview.total_m3.toLocaleString('es-AR', { minimumFractionDigits: 3, maximumFractionDigits: 3 })} m3 actuales`
-        : `${document.accumulated_m3.toLocaleString('es-AR', { minimumFractionDigits: 3, maximumFractionDigits: 3 })} m3 acumulados`,
+        ? `${preview.total_m3.toLocaleString('es-AR', { minimumFractionDigits: 3, maximumFractionDigits: 3 })} m3 actuales · tarifa ${formatCurrency(preview.storage_rate)}`
+        : undefined,
     },
     {
       label: 'Preparacion',
@@ -285,4 +285,70 @@ export async function downloadBillingDocumentPdf(document: BillingDocument, prev
   }
 
   doc.save(buildFileName(`remito-${document.client_name.toLowerCase().replace(/[^a-z0-9]+/gi, '-')}-${document.period}`));
+}
+
+export function downloadStorageDailyReportPdf(report: StorageDailyReport): void {
+  if (report.rows.length === 0) {
+    throw new Error('No hay detalle diario para exportar.');
+  }
+
+  const doc = new jsPDF({ unit: 'mm', format: 'a4' });
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const pageHeight = doc.internal.pageSize.getHeight();
+  const margin = 14;
+  let cursorY = margin;
+
+  const drawHeader = () => {
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(16);
+    doc.text(`Storage diario · ${report.client_name}`, margin, cursorY);
+    cursorY += 8;
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(10);
+    doc.setTextColor(107, 114, 128);
+    doc.text(`Periodo ${report.period} · Generado ${new Date().toLocaleString('es-AR')}`, margin, cursorY);
+    cursorY += 6;
+    doc.text(`Tarifa mensual aplicada ${formatCurrency(report.storage_rate)} por m3 · Valor diario ${formatCurrency(report.daily_rate_per_m3)} por m3`, margin, cursorY);
+    cursorY += 6;
+    doc.text(`Storage total del periodo ${formatCurrency(report.storage_total)} · m3 actuales ${report.current_m3.toFixed(3)}`, margin, cursorY);
+    doc.setTextColor(17, 24, 39);
+    cursorY += 10;
+  };
+
+  const drawTableHeader = () => {
+    doc.setFillColor(249, 250, 251);
+    doc.rect(margin, cursorY - 5, pageWidth - margin * 2, 8, 'F');
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(10);
+    doc.text('Fecha', margin + 2, cursorY);
+    doc.text('m3 del dia', margin + 60, cursorY);
+    doc.text('Importe diario', pageWidth - margin - 2, cursorY, { align: 'right' });
+    cursorY += 8;
+  };
+
+  const ensureSpace = (requiredHeight: number) => {
+    if (cursorY + requiredHeight <= pageHeight - margin) return;
+    doc.addPage();
+    cursorY = margin;
+    drawHeader();
+    drawTableHeader();
+  };
+
+  drawHeader();
+  drawTableHeader();
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(10);
+  report.rows.forEach((row) => {
+    ensureSpace(7);
+    doc.text(new Date(row.date).toLocaleDateString('es-AR'), margin + 2, cursorY);
+    doc.text(row.volume_m3.toFixed(3), margin + 60, cursorY);
+    doc.text(formatCurrency(row.amount), pageWidth - margin - 2, cursorY, { align: 'right' });
+    cursorY += 7;
+  });
+
+  cursorY += 4;
+  doc.setFont('helvetica', 'bold');
+  doc.text(`Total storage del periodo: ${formatCurrency(report.storage_total)}`, pageWidth - margin - 2, cursorY, { align: 'right' });
+  doc.save(buildFileName(`storage-diario-${report.client_name.replace(/\s+/g, '-').toLowerCase()}`));
 }

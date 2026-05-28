@@ -66,6 +66,25 @@ export interface BillingPreviewItem {
   missing_storage: boolean;
 }
 
+export interface StorageDailyReportRow {
+  date: string;
+  volume_m3: number;
+  amount: number;
+}
+
+export interface StorageDailyReport {
+  client_id: number;
+  client_name: string;
+  period: string;
+  current_m3: number;
+  storage_base_rate: number;
+  storage_discount_pct: number;
+  storage_rate: number;
+  daily_rate_per_m3: number;
+  storage_total: number;
+  rows: StorageDailyReportRow[];
+}
+
 export interface ClientStorageRecord {
   id: number;
   client_id: number;
@@ -271,6 +290,25 @@ function normalizeCharge(data: Charge): Charge {
   };
 }
 
+function normalizeStorageDailyReport(data: StorageDailyReport): StorageDailyReport {
+  return {
+    ...data,
+    current_m3: toFiniteNumber(data.current_m3),
+    storage_base_rate: toFiniteNumber(data.storage_base_rate),
+    storage_discount_pct: toFiniteNumber(data.storage_discount_pct),
+    storage_rate: toFiniteNumber(data.storage_rate),
+    daily_rate_per_m3: toFiniteNumber(data.daily_rate_per_m3),
+    storage_total: toFiniteNumber(data.storage_total),
+    rows: Array.isArray(data.rows)
+      ? data.rows.map((row) => ({
+          date: row.date,
+          volume_m3: toFiniteNumber(row.volume_m3),
+          amount: toFiniteNumber(row.amount),
+        }))
+      : [],
+  };
+}
+
 function normalizeBillingDocument(data: BillingDocument): BillingDocument {
   return {
     ...data,
@@ -315,6 +353,11 @@ export async function updateClientBillingRates(
 export async function fetchBillingPreview(period: string): Promise<BillingPreviewItem[]> {
   const { data } = await api.get<BillingPreviewItem[]>('/billing/preview', { params: { period } });
   return data.map(normalizeBillingPreviewItem);
+}
+
+export async function fetchStorageDailyReport(clientId: number, period: string): Promise<StorageDailyReport> {
+  const { data } = await api.get<StorageDailyReport>('/billing/storage-daily-report', { params: { client_id: clientId, period } });
+  return normalizeStorageDailyReport(data);
 }
 
 export async function fetchClientStorageRecords(params: { client_id?: number; period?: string } = {}): Promise<ClientStorageRecord[]> {

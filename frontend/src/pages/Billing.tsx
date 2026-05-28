@@ -8,6 +8,7 @@ import {
   deleteManualCharge,
   fetchBillingDocuments,
   fetchBillingPreview,
+  fetchStorageDailyReport,
   fetchClientBillingRates,
   fetchGlobalBillingRates,
   fetchManualCharges,
@@ -22,7 +23,7 @@ import {
   type ManualCharge,
 } from '../services/billing';
 import { formatCurrency, formatNumber, getChargeStatusClasses, getCurrentPeriod, toFiniteNumber } from '../utils/billingFormat';
-import { downloadBillingDocumentPdf } from '../utils/billingPdf';
+import { downloadBillingDocumentPdf, downloadStorageDailyReportPdf } from '../utils/billingPdf';
 
 type EditableClientRate = {
   client_id: number;
@@ -72,6 +73,7 @@ export default function Billing() {
   const [globalRatesSeenAt, setGlobalRatesSeenAt] = useState('');
   const [savingManualCharge, setSavingManualCharge] = useState(false);
   const [deletingManualChargeId, setDeletingManualChargeId] = useState<number | null>(null);
+  const [downloadingStorageReportClientId, setDownloadingStorageReportClientId] = useState<number | null>(null);
   const [manualChargeError, setManualChargeError] = useState('');
   const [manualChargeForm, setManualChargeForm] = useState({
     client_id: '',
@@ -93,11 +95,10 @@ export default function Billing() {
       (acc, item) => ({
         total: acc.total + toFiniteNumber(item.total),
         totalM3: acc.totalM3 + toFiniteNumber(item.total_m3),
-        accumulatedM3: acc.accumulatedM3 + toFiniteNumber(item.accumulated_m3),
         totalOrders: acc.totalOrders + Math.trunc(toFiniteNumber(item.total_orders)),
         totalShippingAmount: acc.totalShippingAmount + toFiniteNumber(item.shipping_amount),
       }),
-      { total: 0, totalM3: 0, accumulatedM3: 0, totalOrders: 0, totalShippingAmount: 0 },
+      { total: 0, totalM3: 0, totalOrders: 0, totalShippingAmount: 0 },
     );
   }, [preview]);
 
@@ -328,6 +329,19 @@ export default function Billing() {
     }
   };
 
+  const handleDownloadStorageDailyReport = async (clientId: number) => {
+    setDownloadingStorageReportClientId(clientId);
+    setError('');
+    try {
+      const report = await fetchStorageDailyReport(clientId, period);
+      downloadStorageDailyReportPdf(report);
+    } catch (err: unknown) {
+      setError(getApiErrorMessage(err, 'No se pudo generar el reporte diario de almacenamiento.'));
+    } finally {
+      setDownloadingStorageReportClientId(null);
+    }
+  };
+
   const handleCreateManualCharge = async (event: FormEvent) => {
     event.preventDefault();
     const clientId = Number(manualChargeForm.client_id);
@@ -432,7 +446,7 @@ export default function Billing() {
 
       <section className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
         <SummaryCard label={isClient ? 'Acumulado a abonar' : 'Total estimado'} value={formatCurrency(totals.total)} tone="blue" />
-        <SummaryCard label="Almacenamiento acumulado" value={`${formatNumber(totals.accumulatedM3, 3)} m3`} tone="emerald" />
+        <SummaryCard label="Almacenamiento actual" value={`${formatNumber(totals.totalM3, 3)} m3`} tone="emerald" />
         <SummaryCard label="Pedidos / remitos" value={`${formatNumber(totals.totalOrders, 0)} / ${formatNumber(documents.length, 0)}`} tone="amber" />
         <SummaryCard
           label={isClient ? 'Remitos emitidos' : 'Estado del período'}
@@ -567,7 +581,7 @@ export default function Billing() {
                     {
                       label: 'Storage',
                       amount: toFiniteNumber(item.storage_amount),
-                      detail: `${formatNumber(toFiniteNumber(item.accumulated_m3), 3)} m3 acumulados en el período · ${formatNumber(toFiniteNumber(item.total_m3), 3)} m3 actuales · Base ${formatCurrency(toFiniteNumber(item.storage_base_rate))}`,
+                      detail: `${formatNumber(toFiniteNumber(item.total_m3), 3)} m3 actuales · Tarifa aplicada ${formatCurrency(toFiniteNumber(item.storage_rate))} por m3/mes${toFiniteNumber(item.storage_discount_pct) > 0 ? ` (base ${formatCurrency(toFiniteNumber(item.storage_base_rate))} - desc ${formatNumber(toFiniteNumber(item.storage_discount_pct), 2)}%)` : ''} · Prorrateo diario en el mes`,
                     },
                     {
                       label: 'Preparación',
@@ -658,7 +672,20 @@ export default function Billing() {
                                     <div className="text-sm font-semibold text-gray-900">Detalle de conceptos</div>
                                     <div className="text-xs text-gray-500 mt-1">Sólo se muestran conceptos con importe en este período.</div>
                                   </div>
-                                  <div className="text-sm font-semibold text-gray-900">{formatCurrency(toFiniteNumber(item.total))}</div>
+                                  <div className="flex items-center gap-3">
+                                    <button
+                                      type="button"
+                                      onClick={(event) => {
+                                        event.stopPropagation();
+                                        handleDownloadStorageDailyReport(item.client_id).catch(() => {});
+                                      }}
+                                      disabled={downloadingStorageReportClientId === item.client_id}
+                                      className="px-3 py-1.5 text-xs font-medium text-blue-700 bg-blue-50 rounded-lg hover:bg-blue-100 transition disabled:opacity-50"
+                                    >
+                                      {downloadingStorageReportClientId === item.client_id ? 'Generando reporte...' : 'Imprimir storage diario'}
+                                    </button>
+                                    <div className="text-sm font-semibold text-gray-900">{formatCurrency(toFiniteNumber(item.total))}</div>
+                                  </div>
                                 </div>
 
                                 {breakdownRows.length === 0 ? (
@@ -760,7 +787,7 @@ export default function Billing() {
                     <td className="px-6 py-4">
                       <div className="font-medium text-gray-900">{document.client_name}</div>
                       <div className="text-xs text-gray-500 mt-1">
-                        {formatNumber(document.accumulated_m3, 3)} m3 acumulados · Almacenamiento {formatCurrency(document.storage_total)} · Preparación {formatCurrency(document.preparation_total)} · Alta {formatCurrency(document.product_creation_total)} · Etiquetas {formatCurrency(document.label_print_total)} · Traslados a transporte {formatCurrency(document.transport_dispatch_total)} · Descargas {formatCurrency(document.truck_unloading_total)} · Cargos manuales {formatCurrency(document.manual_charge_total)} · Envío {formatCurrency(document.shipping_total)}
+                        Almacenamiento {formatCurrency(document.storage_total)} · Preparación {formatCurrency(document.preparation_total)} · Alta {formatCurrency(document.product_creation_total)} · Etiquetas {formatCurrency(document.label_print_total)} · Traslados a transporte {formatCurrency(document.transport_dispatch_total)} · Descargas {formatCurrency(document.truck_unloading_total)} · Cargos manuales {formatCurrency(document.manual_charge_total)} · Envío {formatCurrency(document.shipping_total)}
                       </div>
                     </td>
                     <td className="px-4 py-4 text-gray-500">{document.period}</td>

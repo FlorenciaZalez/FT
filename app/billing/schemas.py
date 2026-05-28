@@ -94,6 +94,25 @@ class BillingPreviewItem(BaseModel):
     missing_storage: bool
 
 
+class StorageDailyReportItem(BaseModel):
+    date: date
+    volume_m3: float
+    amount: float
+
+
+class StorageDailyReportResponse(BaseModel):
+    client_id: int
+    client_name: str
+    period: str
+    current_m3: float
+    storage_base_rate: float
+    storage_discount_pct: float
+    storage_rate: float
+    daily_rate_per_m3: float
+    storage_total: float
+    rows: list[StorageDailyReportItem]
+
+
 class ClientStorageRecordBase(BaseModel):
     period: str = Field(regex=r"^\d{4}-\d{2}$")
     storage_m3: float = Field(gt=0)
