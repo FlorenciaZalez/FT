@@ -5,8 +5,10 @@ import SuccessToast from '../components/SuccessToast';
 import {
   createClientStorageRecord,
   deleteClientStorageRecord,
+  fetchBillingPreview,
   fetchClientStorageRecords,
   updateClientStorageRecord,
+  type BillingPreviewItem,
   type ClientStorageRecord,
 } from '../services/billing';
 import { fetchProducts } from '../services/products';
@@ -57,6 +59,7 @@ export default function ClientDetail() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [stockItems, setStockItems] = useState<StockSummaryItem[]>([]);
   const [storageRecords, setStorageRecords] = useState<ClientStorageRecord[]>([]);
+  const [currentBillingPreview, setCurrentBillingPreview] = useState<BillingPreviewItem | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [activeTab, setActiveTab] = useState<TabKey>('pedidos');
@@ -73,6 +76,7 @@ export default function ClientDetail() {
   useEffect(() => {
     if (!id) return;
     const clientId = parseInt(id);
+    const targetPeriod = formatCurrentPeriod(new Date());
     let cancelled = false;
 
     setLoading(true);
@@ -84,11 +88,12 @@ export default function ClientDetail() {
 
         setClient(clientData);
 
-        const [ordersResult, productsResult, stockResult, storageResult] = await Promise.allSettled([
+        const [ordersResult, productsResult, stockResult, storageResult, previewResult] = await Promise.allSettled([
           fetchOrders(),
           fetchProducts(),
           fetchStockSummary(),
           fetchClientStorageRecords({ client_id: clientId }),
+          fetchBillingPreview(targetPeriod),
         ]);
 
         if (cancelled) return;
@@ -114,6 +119,14 @@ export default function ClientDetail() {
         } else {
           setStorageRecords([]);
           setStorageError('No se pudo cargar la ocupación mensual.');
+        }
+
+        if (previewResult.status === 'fulfilled') {
+          setCurrentBillingPreview(
+            previewResult.value.find((item) => item.client_id === clientId) ?? null,
+          );
+        } else {
+          setCurrentBillingPreview(null);
         }
       })
       .catch(() => {
@@ -144,7 +157,7 @@ export default function ClientDetail() {
   }
 
   const now = new Date();
-  const currentPeriod = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  const currentPeriod = formatCurrentPeriod(now);
   const ordersThisMonth = orders.filter((o) => {
     const d = new Date(o.created_at);
     return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
@@ -152,6 +165,7 @@ export default function ClientDetail() {
   const lastOrder = orders.length > 0
     ? orders.reduce((latest, o) => (new Date(o.created_at) > new Date(latest.created_at) ? o : latest))
     : null;
+  const isVariableStorage = Boolean(client.variable_storage_enabled);
   const currentStorageRecord = storageRecords.find((record) => record.period === currentPeriod);
 
   const reloadStorageRecords = async () => {
@@ -422,15 +436,63 @@ export default function ClientDetail() {
         <Section
           title="Ocupación mensual"
           count={storageRecords.length}
-          action={
+          action={!isVariableStorage ? (
             <button
               onClick={openCreateStorageModal}
               className="ui-btn-primary px-3 py-1.5 text-xs font-medium rounded-lg"
             >
               + Cargar ocupación
             </button>
-          }
+          ) : undefined}
         >
+          {isVariableStorage ? (
+            <>
+              <div className="mx-4 mt-4 rounded-xl border border-blue-200 bg-blue-50 px-4 py-3">
+                <p className="text-sm font-semibold text-blue-700">La ocupación de este cliente se calcula automáticamente por stock</p>
+                <p className="text-sm text-blue-700 mt-1">
+                  {currentBillingPreview
+                    ? `${currentBillingPreview.total_m3.toFixed(3)} m3 actuales para ${formatPeriodLabel(currentPeriod)}.`
+                    : `Todavía no hay un resumen automático disponible para ${formatPeriodLabel(currentPeriod)}.`}
+                </p>
+              </div>
+
+              {currentBillingPreview?.missing_storage && (
+                <div className="mx-4 mt-4 rounded-xl border border-yellow-200 bg-yellow-50 px-4 py-3">
+                  <p className="text-sm font-semibold text-yellow-800">Hay productos sin volumen o dimensiones completas</p>
+                  <p className="text-sm text-yellow-800 mt-1">
+                    Finanzas calcula los m3 automáticos con los datos de volumen de cada producto. Si faltan medidas, el total puede quedar por debajo del stock real.
+                  </p>
+                </div>
+              )}
+
+              {storageRecords.length > 0 && (
+                <div className="mt-4">
+                  <div className="px-4 pb-2 text-xs font-medium uppercase tracking-wide text-gray-500">
+                    Registros manuales existentes
+                  </div>
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-gray-200">
+                        <th className="text-left px-4 py-2 font-medium text-gray-500">Período</th>
+                        <th className="text-right px-4 py-2 font-medium text-gray-500">m3</th>
+                        <th className="text-left px-4 py-2 font-medium text-gray-500">Actualizado</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {storageRecords.map((record) => (
+                        <tr key={record.id} className="border-b border-gray-200 hover:bg-gray-50">
+                          <td className="px-4 py-3 font-medium text-gray-900">{formatPeriodLabel(record.period)}</td>
+                          <td className="px-4 py-3 text-right text-gray-900">{record.storage_m3.toFixed(3)}</td>
+                          <td className="px-4 py-3 text-gray-500 text-xs">{new Date(record.updated_at).toLocaleString('es-AR')}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </>
+          ) : (
+            <>
           {!currentStorageRecord && (
             <div className="mx-4 mt-4 rounded-xl border border-yellow-200 bg-yellow-50 px-4 py-3">
               <p className="text-sm font-semibold text-yellow-800">Falta cargar la ocupación de este mes</p>
@@ -497,6 +559,8 @@ export default function ClientDetail() {
             <div className="mx-4 mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
               {storageError}
             </div>
+          )}
+            </>
           )}
         </Section>
       )}
@@ -727,6 +791,10 @@ function formatPeriodLabel(period: string) {
     month: 'long',
     year: 'numeric',
   });
+}
+
+function formatCurrentPeriod(date: Date) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
 }
 
 function getApiErrorMessage(error: unknown, fallback: string) {

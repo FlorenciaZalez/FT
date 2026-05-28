@@ -32,6 +32,7 @@ export interface BillingPreviewItem {
   client_name: string;
   period: string;
   total_m3: number;
+  accumulated_m3: number;
   total_orders: number;
   storage_base_rate: number;
   storage_discount_pct: number;
@@ -91,6 +92,7 @@ export interface Charge {
   client_name: string | null;
   period: string;
   total_m3: number;
+  accumulated_m3: number;
   total_orders: number;
   base_storage_rate: number;
   storage_discount_pct: number;
@@ -122,6 +124,7 @@ export interface BillingDocument {
   client_id: number;
   client_name: string;
   period: string;
+  accumulated_m3: number;
   storage_total: number;
   preparation_total: number;
   product_creation_total: number;
@@ -203,6 +206,7 @@ function normalizeBillingPreviewItem(data: BillingPreviewItem): BillingPreviewIt
   return {
     ...data,
     total_m3: toFiniteNumber(data.total_m3),
+    accumulated_m3: toFiniteNumber(data.accumulated_m3),
     total_orders: Math.trunc(toFiniteNumber(data.total_orders)),
     storage_base_rate: toFiniteNumber(data.storage_base_rate),
     storage_discount_pct: toFiniteNumber(data.storage_discount_pct),
@@ -243,6 +247,7 @@ function normalizeCharge(data: Charge): Charge {
   return {
     ...data,
     total_m3: toFiniteNumber(data.total_m3),
+    accumulated_m3: toFiniteNumber(data.accumulated_m3),
     total_orders: Math.trunc(toFiniteNumber(data.total_orders)),
     base_storage_rate: toFiniteNumber(data.base_storage_rate),
     storage_discount_pct: toFiniteNumber(data.storage_discount_pct),
@@ -269,6 +274,7 @@ function normalizeCharge(data: Charge): Charge {
 function normalizeBillingDocument(data: BillingDocument): BillingDocument {
   return {
     ...data,
+    accumulated_m3: toFiniteNumber(data.accumulated_m3),
     storage_total: toFiniteNumber(data.storage_total),
     preparation_total: toFiniteNumber(data.preparation_total),
     product_creation_total: toFiniteNumber(data.product_creation_total),

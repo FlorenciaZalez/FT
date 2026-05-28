@@ -50,6 +50,7 @@ class _ComputedCharge:
     client: Client
     period: str
     total_m3: Decimal
+    accumulated_m3: Decimal
     total_orders: int
     storage_base_rate: Decimal
     storage_discount_pct: Decimal
@@ -98,6 +99,7 @@ def _serialize_charge(charge: Charge, client_name: str | None = None) -> dict:
         "client_name": client_name,
         "period": charge.period,
         "total_m3": float(charge.total_m3),
+        "accumulated_m3": float(charge.accumulated_m3),
         "total_orders": charge.total_orders,
         "base_storage_rate": float(charge.base_storage_rate),
         "storage_discount_pct": float(charge.storage_discount_pct),
@@ -143,6 +145,7 @@ def _serialize_billing_document(document: BillingDocument, client_name: str) -> 
         "client_id": document.client_id,
         "client_name": client_name,
         "period": document.period,
+        "accumulated_m3": float(document.accumulated_m3),
         "storage_total": float(document.storage_total),
         "preparation_total": float(document.preparation_total),
         "product_creation_total": float(document.product_creation_total),
@@ -255,6 +258,15 @@ def _calculate_storage_amount_from_daily_volumes(
     return total.quantize(TWOPLACES, rounding=ROUND_HALF_UP)
 
 
+def _accumulate_storage_volume_for_daily_volumes(
+    daily_volumes: list[Decimal | float | int | None],
+) -> Decimal:
+    total = Decimal("0.000")
+    for volume in daily_volumes:
+        total += _to_decimal(volume, THREEPLACES)
+    return total.quantize(THREEPLACES, rounding=ROUND_HALF_UP)
+
+
 def _resolve_storage_volume(
     volume_m3: Decimal | float | int | None,
     width_cm: Decimal | float | int | None,
@@ -324,12 +336,12 @@ async def _calculate_variable_storage_metrics(
     client_id: int,
     period: str,
     storage_rate: Decimal,
-) -> tuple[Decimal, Decimal, bool]:
+) -> tuple[Decimal, Decimal, Decimal, bool]:
     start, end = _parse_period(period)
     now = datetime.now(timezone.utc)
     effective_end = min(end, now)
     if effective_end <= start:
-        return Decimal("0.000"), Decimal("0.00"), False
+        return Decimal("0.000"), Decimal("0.000"), Decimal("0.00"), False
 
     quantity_rows = await db.execute(
         select(
@@ -400,7 +412,7 @@ async def _calculate_variable_storage_metrics(
 
     current_total_m3 = _total_volume_for_quantities(current_quantities, product_volumes)
     if missing_dimensions:
-        return current_total_m3, Decimal("0.00"), True
+        return current_total_m3, Decimal("0.000"), Decimal("0.00"), True
 
     last_day_of_month = (end - timedelta(days=1)).date()
     billable_end_day = min(effective_end.date(), last_day_of_month)
@@ -412,8 +424,9 @@ async def _calculate_variable_storage_metrics(
         billable_end_day,
     )
     days_in_month = monthrange(start.year, start.month)[1]
+    accumulated_m3 = _accumulate_storage_volume_for_daily_volumes(daily_volumes)
     storage_amount = _calculate_storage_amount_from_daily_volumes(daily_volumes, storage_rate, days_in_month)
-    return current_total_m3, storage_amount, False
+    return current_total_m3, accumulated_m3, storage_amount, False
 
 
 def _serialize_product_creation_record(record: ProductCreationRecord, client_name: str | None = None) -> dict:
@@ -939,7 +952,7 @@ async def _build_preview_rows(
         shipping_multiplier = _discount_multiplier(shipping_discount_pct)
 
         if client.variable_storage_enabled or client.id not in storage_map:
-            total_m3, storage_amount, missing_storage = await _calculate_variable_storage_metrics(
+            total_m3, accumulated_m3, storage_amount, missing_storage = await _calculate_variable_storage_metrics(
                 db,
                 client.id,
                 period,
@@ -948,6 +961,7 @@ async def _build_preview_rows(
         else:
             storage_record = storage_map.get(client.id)
             total_m3 = _to_decimal(storage_record.storage_m3 if storage_record else 0, THREEPLACES)
+            accumulated_m3 = total_m3
             storage_amount = _to_decimal(total_m3 * storage_rate)
             missing_storage = False
 
@@ -991,6 +1005,7 @@ async def _build_preview_rows(
                 client=client,
                 period=period,
                 total_m3=total_m3,
+                accumulated_m3=accumulated_m3,
                 total_orders=total_orders,
                 storage_base_rate=storage_base_rate,
                 storage_discount_pct=storage_discount_pct,
@@ -1053,6 +1068,7 @@ async def preview_charges(db: AsyncSession, user: User, period: str) -> list[dic
             "client_name": preview.client.name,
             "period": preview.period,
             "total_m3": float(preview.total_m3),
+            "accumulated_m3": float(preview.accumulated_m3),
             "total_orders": preview.total_orders,
             "storage_base_rate": float(preview.storage_base_rate),
             "storage_discount_pct": float(preview.storage_discount_pct),
@@ -1113,6 +1129,7 @@ async def generate_charges(db: AsyncSession, period: str, due_date: date | None,
             continue
 
         charge.total_m3 = preview.total_m3
+        charge.accumulated_m3 = preview.accumulated_m3
         charge.total_orders = preview.total_orders
         charge.base_storage_rate = preview.storage_base_rate
         charge.storage_discount_pct = preview.storage_discount_pct
@@ -1247,6 +1264,7 @@ async def generate_billing_documents(
             documents.append(document)
             continue
 
+        document.accumulated_m3 = preview.accumulated_m3
         document.storage_total = preview.storage_amount
         document.preparation_total = preview.preparation_amount
         document.product_creation_total = preview.product_creation_amount

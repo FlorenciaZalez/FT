@@ -93,6 +93,7 @@ class Charge(Base):
     )
     period: Mapped[str] = mapped_column(String(7), nullable=False, index=True)
     total_m3: Mapped[float] = mapped_column(Numeric(14, 3), nullable=False, default=0)
+    accumulated_m3: Mapped[float] = mapped_column(Numeric(14, 3), nullable=False, default=0)
     total_orders: Mapped[int] = mapped_column(nullable=False, default=0)
     base_storage_rate: Mapped[float] = mapped_column(Numeric(12, 2), nullable=False, default=0)
     storage_discount_pct: Mapped[float] = mapped_column(Numeric(5, 2), nullable=False, default=0)
@@ -289,6 +290,7 @@ class BillingDocument(Base):
         ForeignKey("clients.id", ondelete="CASCADE"), nullable=False, index=True
     )
     period: Mapped[str] = mapped_column(String(7), nullable=False, index=True)
+    accumulated_m3: Mapped[float] = mapped_column(Numeric(14, 3), nullable=False, default=0)
     storage_total: Mapped[float] = mapped_column(Numeric(14, 2), nullable=False, default=0)
     preparation_total: Mapped[float] = mapped_column(Numeric(14, 2), nullable=False, default=0)
     product_creation_total: Mapped[float] = mapped_column(Numeric(14, 2), nullable=False, default=0)

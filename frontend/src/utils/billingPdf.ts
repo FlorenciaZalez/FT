@@ -72,7 +72,7 @@ export function downloadChargesPdf(charges: Charge[], title: string, filePrefix 
     doc.text(`Vencimiento: ${new Date(charge.due_date).toLocaleDateString('es-AR')}`, margin + 55, cursorY + 14);
     doc.text(`Estado: ${getChargeStatusLabel(charge.status)}`, margin + 108, cursorY + 14);
 
-    doc.text(`Almacenamiento: ${formatCurrency(charge.storage_amount)} (base ${formatCurrency(charge.base_storage_rate)} / desc ${charge.storage_discount_pct}%)`, margin + 4, cursorY + 22);
+    doc.text(`Almacenamiento: ${formatCurrency(charge.storage_amount)} (${charge.accumulated_m3.toFixed(3)} m3 acumulados / ${charge.total_m3.toFixed(3)} m3 actuales / base ${formatCurrency(charge.base_storage_rate)} / desc ${charge.storage_discount_pct}%)`, margin + 4, cursorY + 22);
     doc.text(`Preparacion: ${formatCurrency(charge.preparation_amount)} (primer producto ${formatCurrency(charge.base_preparation_rate)} / adicional ${formatCurrency(charge.applied_preparation_rate)})`, margin + 4, cursorY + 27);
     doc.text(`Alta producto: ${formatCurrency(charge.product_creation_amount)}`, margin + 4, cursorY + 32);
     doc.text(`Traslados a transporte: ${formatCurrency(charge.transport_dispatch_amount)}`, margin + 4, cursorY + 37);
@@ -112,8 +112,8 @@ export async function downloadBillingDocumentPdf(document: BillingDocument, prev
       label: 'Storage',
       amount: document.storage_total,
       detail: preview
-        ? `${preview.total_m3.toLocaleString('es-AR', { minimumFractionDigits: 3, maximumFractionDigits: 3 })} m3 calculados`
-        : undefined,
+        ? `${preview.accumulated_m3.toLocaleString('es-AR', { minimumFractionDigits: 3, maximumFractionDigits: 3 })} m3 acumulados · ${preview.total_m3.toLocaleString('es-AR', { minimumFractionDigits: 3, maximumFractionDigits: 3 })} m3 actuales`
+        : `${document.accumulated_m3.toLocaleString('es-AR', { minimumFractionDigits: 3, maximumFractionDigits: 3 })} m3 acumulados`,
     },
     {
       label: 'Preparacion',

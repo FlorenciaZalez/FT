@@ -31,7 +31,7 @@ export default function BillingChargeDetailModal({
               <BreakdownCard
                 label="Almacenamiento"
                 value={formatCurrency(charge.storage_amount)}
-                note={`Base ${formatCurrency(charge.base_storage_rate)} · Desc ${formatNumber(charge.storage_discount_pct, 2)}% · Final ${formatCurrency(charge.applied_storage_rate)} · ${formatNumber(charge.total_m3, 3)} m3`}
+                note={`Base ${formatCurrency(charge.base_storage_rate)} · Desc ${formatNumber(charge.storage_discount_pct, 2)}% · Final ${formatCurrency(charge.applied_storage_rate)} · ${formatNumber(charge.accumulated_m3, 3)} m3 acumulados · ${formatNumber(charge.total_m3, 3)} m3 actuales`}
               />
               <BreakdownCard
                 label="Preparación"

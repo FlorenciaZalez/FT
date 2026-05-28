@@ -66,6 +66,7 @@ class BillingPreviewItem(BaseModel):
     client_name: str
     period: str
     total_m3: float
+    accumulated_m3: float
     total_orders: int
     storage_base_rate: float
     storage_discount_pct: float
@@ -122,6 +123,7 @@ class ChargeResponse(BaseModel):
     client_name: str | None = None
     period: str
     total_m3: float
+    accumulated_m3: float
     total_orders: int
     base_storage_rate: float
     storage_discount_pct: float
@@ -181,6 +183,7 @@ class BillingDocumentResponse(BaseModel):
     client_id: int
     client_name: str
     period: str
+    accumulated_m3: float
     storage_total: float
     preparation_total: float
     product_creation_total: float

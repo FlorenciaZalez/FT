@@ -222,8 +222,24 @@ async def _ensure_runtime_schema() -> None:
         await connection.execute(
             text(
                 """
+                ALTER TABLE charges
+                ADD COLUMN IF NOT EXISTS accumulated_m3 NUMERIC(14, 3) NOT NULL DEFAULT 0
+                """
+            )
+        )
+        await connection.execute(
+            text(
+                """
                 ALTER TABLE billing_documents
                 ADD COLUMN IF NOT EXISTS label_print_total NUMERIC(14, 2) NOT NULL DEFAULT 0
+                """
+            )
+        )
+        await connection.execute(
+            text(
+                """
+                ALTER TABLE billing_documents
+                ADD COLUMN IF NOT EXISTS accumulated_m3 NUMERIC(14, 3) NOT NULL DEFAULT 0
                 """
             )
         )

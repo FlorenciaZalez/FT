@@ -93,10 +93,11 @@ export default function Billing() {
       (acc, item) => ({
         total: acc.total + toFiniteNumber(item.total),
         totalM3: acc.totalM3 + toFiniteNumber(item.total_m3),
+        accumulatedM3: acc.accumulatedM3 + toFiniteNumber(item.accumulated_m3),
         totalOrders: acc.totalOrders + Math.trunc(toFiniteNumber(item.total_orders)),
         totalShippingAmount: acc.totalShippingAmount + toFiniteNumber(item.shipping_amount),
       }),
-      { total: 0, totalM3: 0, totalOrders: 0, totalShippingAmount: 0 },
+      { total: 0, totalM3: 0, accumulatedM3: 0, totalOrders: 0, totalShippingAmount: 0 },
     );
   }, [preview]);
 
@@ -431,7 +432,7 @@ export default function Billing() {
 
       <section className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
         <SummaryCard label={isClient ? 'Acumulado a abonar' : 'Total estimado'} value={formatCurrency(totals.total)} tone="blue" />
-        <SummaryCard label="Almacenamiento actual" value={`${formatNumber(totals.totalM3, 3)} m3`} tone="emerald" />
+        <SummaryCard label="Almacenamiento acumulado" value={`${formatNumber(totals.accumulatedM3, 3)} m3`} tone="emerald" />
         <SummaryCard label="Pedidos / remitos" value={`${formatNumber(totals.totalOrders, 0)} / ${formatNumber(documents.length, 0)}`} tone="amber" />
         <SummaryCard
           label={isClient ? 'Remitos emitidos' : 'Estado del período'}
@@ -566,7 +567,7 @@ export default function Billing() {
                     {
                       label: 'Storage',
                       amount: toFiniteNumber(item.storage_amount),
-                      detail: `${formatNumber(toFiniteNumber(item.total_m3), 3)} m3 actuales · Base ${formatCurrency(toFiniteNumber(item.storage_base_rate))} · Monto acumulado día a día en el período`,
+                      detail: `${formatNumber(toFiniteNumber(item.accumulated_m3), 3)} m3 acumulados en el período · ${formatNumber(toFiniteNumber(item.total_m3), 3)} m3 actuales · Base ${formatCurrency(toFiniteNumber(item.storage_base_rate))}`,
                     },
                     {
                       label: 'Preparación',
@@ -759,7 +760,7 @@ export default function Billing() {
                     <td className="px-6 py-4">
                       <div className="font-medium text-gray-900">{document.client_name}</div>
                       <div className="text-xs text-gray-500 mt-1">
-                        Almacenamiento {formatCurrency(document.storage_total)} · Preparación {formatCurrency(document.preparation_total)} · Alta {formatCurrency(document.product_creation_total)} · Etiquetas {formatCurrency(document.label_print_total)} · Traslados a transporte {formatCurrency(document.transport_dispatch_total)} · Descargas {formatCurrency(document.truck_unloading_total)} · Cargos manuales {formatCurrency(document.manual_charge_total)} · Envío {formatCurrency(document.shipping_total)}
+                        {formatNumber(document.accumulated_m3, 3)} m3 acumulados · Almacenamiento {formatCurrency(document.storage_total)} · Preparación {formatCurrency(document.preparation_total)} · Alta {formatCurrency(document.product_creation_total)} · Etiquetas {formatCurrency(document.label_print_total)} · Traslados a transporte {formatCurrency(document.transport_dispatch_total)} · Descargas {formatCurrency(document.truck_unloading_total)} · Cargos manuales {formatCurrency(document.manual_charge_total)} · Envío {formatCurrency(document.shipping_total)}
                       </div>
                     </td>
                     <td className="px-4 py-4 text-gray-500">{document.period}</td>

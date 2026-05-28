@@ -5,6 +5,13 @@ from app.billing import service
 
 
 class VariableStorageBillingTests(unittest.TestCase):
+    def test_accumulated_storage_volume_sums_daily_volumes(self) -> None:
+        accumulated = service._accumulate_storage_volume_for_daily_volumes(
+            daily_volumes=[Decimal("2.000")] * 10 + [Decimal("1.000")] * 20,
+        )
+
+        self.assertEqual(accumulated, Decimal("40.000"))
+
     def test_daily_variable_storage_prorates_monthly_rate(self) -> None:
         amount = service._calculate_storage_amount_from_daily_volumes(
             daily_volumes=[Decimal("2.000")] * 10 + [Decimal("1.000")] * 20,
