@@ -6,6 +6,16 @@ const COMPANY_NAME = 'Topix Fulfillment';
 const COMPANY_PHONE = '+54 9 11 2397 5685';
 const COMPANY_ADDRESS = 'Jose Ignacio de la Rosa 5934, Mataderos, Buenos Aires';
 
+function formatCalendarDate(value: string): string {
+  const dateOnlyMatch = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (dateOnlyMatch) {
+    const [, year, month, day] = dateOnlyMatch;
+    return `${day}/${month}/${year}`;
+  }
+
+  return new Date(value).toLocaleDateString('es-AR');
+}
+
 function getBillingDocumentStatusLabel(status: BillingDocument['status']): string {
   switch (status) {
     case 'paid':
@@ -69,7 +79,7 @@ export function downloadChargesPdf(charges: Charge[], title: string, filePrefix 
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(10);
     doc.text(`Periodo: ${charge.period}`, margin + 4, cursorY + 14);
-    doc.text(`Vencimiento: ${new Date(charge.due_date).toLocaleDateString('es-AR')}`, margin + 55, cursorY + 14);
+    doc.text(`Vencimiento: ${formatCalendarDate(charge.due_date)}`, margin + 55, cursorY + 14);
     doc.text(`Estado: ${getChargeStatusLabel(charge.status)}`, margin + 108, cursorY + 14);
 
     doc.text(`Almacenamiento: ${formatCurrency(charge.storage_amount)} (${charge.total_m3.toFixed(3)} m3 actuales / tarifa ${formatCurrency(charge.applied_storage_rate)} / desc ${charge.storage_discount_pct}%)`, margin + 4, cursorY + 22);
@@ -213,7 +223,7 @@ export async function downloadBillingDocumentPdf(document: BillingDocument, prev
   doc.text(document.client_name, margin + 4, cursorY + 14);
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(10);
-  doc.text(`Vencimiento: ${new Date(document.due_date).toLocaleDateString('es-AR')}`, margin + 4, cursorY + 22);
+  doc.text(`Vencimiento: ${formatCalendarDate(document.due_date)}`, margin + 4, cursorY + 22);
   doc.text(`Remito #${document.id}`, margin + 4, cursorY + 28);
   doc.setFont('helvetica', 'bold');
   doc.text(`Total: ${formatCurrency(document.total)}`, pageWidth - margin - 4, cursorY + 22, { align: 'right' });
@@ -274,7 +284,7 @@ export async function downloadBillingDocumentPdf(document: BillingDocument, prev
     cursorY += 7;
 
     preview.manual_charge_items.forEach((item) => {
-      const note = `${new Date(item.fecha).toLocaleDateString('es-AR')} - ${item.descripcion || item.tipo || 'Cargo manual'}: ${formatCurrency(item.monto)}`;
+      const note = `${formatCalendarDate(item.fecha)} - ${item.descripcion || item.tipo || 'Cargo manual'}: ${formatCurrency(item.monto)}`;
       const wrapped = doc.splitTextToSize(note, contentWidth - 8);
       ensureSpace(8 + wrapped.length * 4);
       doc.setFont('helvetica', 'normal');
@@ -341,7 +351,7 @@ export function downloadStorageDailyReportPdf(report: StorageDailyReport): void 
   doc.setFontSize(10);
   report.rows.forEach((row) => {
     ensureSpace(7);
-    doc.text(new Date(row.date).toLocaleDateString('es-AR'), margin + 2, cursorY);
+    doc.text(formatCalendarDate(row.date), margin + 2, cursorY);
     doc.text(row.volume_m3.toFixed(3), margin + 60, cursorY);
     doc.text(formatCurrency(row.amount), pageWidth - margin - 2, cursorY, { align: 'right' });
     cursorY += 7;
