@@ -318,7 +318,7 @@ export function downloadStorageDailyReportPdf(report: StorageDailyReport): void 
     doc.setTextColor(107, 114, 128);
     doc.text(`Periodo ${report.period} · Generado ${new Date().toLocaleString('es-AR')}`, margin, cursorY);
     cursorY += 6;
-    doc.text(`Tarifa mensual aplicada ${formatCurrency(report.storage_rate)} por m3 · Valor diario ${formatCurrency(report.daily_rate_per_m3)} por m3`, margin, cursorY);
+    doc.text(`Tarifa mensual aplicada ${formatCurrency(report.storage_rate)} por m3`, margin, cursorY);
     cursorY += 6;
     doc.text(`Storage total del periodo ${formatCurrency(report.storage_total)} · m3 actuales ${report.current_m3.toFixed(3)}`, margin, cursorY);
     doc.setTextColor(17, 24, 39);
