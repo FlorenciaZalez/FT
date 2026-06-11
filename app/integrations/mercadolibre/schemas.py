@@ -8,6 +8,7 @@ class MLMappingCreate(BaseModel):
     ml_item_id: str
     ml_variation_id: str | None = None
     ml_account_id: str | None = None
+    force: bool | None = False
 
 
 class MLMappingUpdate(BaseModel):

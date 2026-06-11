@@ -333,7 +333,10 @@ async def create_mapping(db: AsyncSession, user: User, data: dict) -> dict:
 
     normalized_variation_id = normalize_ml_variation_id(data.get("ml_variation_id"))
 
-    await _validate_ml_item_for_client(db, client_id, normalized_item_id)
+    # Allow skipping the ML public validation when explicitly requested (force=True).
+    # This is useful for publications blocked by ML public API policies; use with caution.
+    if not data.get("force"):
+        await _validate_ml_item_for_client(db, client_id, normalized_item_id)
 
     # Verify product exists and belongs to tenant
     product = await db.get(Product, data["product_id"])
