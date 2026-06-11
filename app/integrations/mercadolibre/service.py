@@ -21,7 +21,7 @@ ML_AUTH_URL = "https://auth.mercadolibre.com/authorization"
 ML_TOKEN_URL = "https://api.mercadolibre.com/oauth/token"
 ML_USER_URL = "https://api.mercadolibre.com/users/me"
 ML_API_BASE_URL = "https://api.mercadolibre.com"
-ML_ITEM_ID_PATTERN = re.compile(r"(ML[A-Z])[-_\s]?(\d+)", re.IGNORECASE)
+ML_ITEM_ID_PATTERN = re.compile(r"(ML[A-Z]{1,3})[-_\s]?(\d+)", re.IGNORECASE)
 ML_ORDER_RESOURCE_PATTERN = re.compile(r"/orders/(\d+)")
 
 _ML_PLACEHOLDER_VALUES = {
@@ -1229,6 +1229,13 @@ async def resolve_ml_to_product(
     result = await db.execute(query)
     mappings = list(result.scalars().all())
     mapping = None
+    logger.info(
+        "[ML][MAPPING] resolve_ml_to_product: client_id=%s ml_item_id=%r ml_variation_id=%r found_mappings=%s",
+        client_id,
+        normalized_item_id,
+        ml_variation_id,
+        [f"{m.ml_item_id}:{m.ml_variation_id}" for m in mappings],
+    )
     if normalized_variation_id is not None:
         mapping = next(
             (
@@ -1247,6 +1254,48 @@ async def resolve_ml_to_product(
             ),
             None,
         )
+    if mapping is None:
+        logger.info(
+            "[ML][MAPPING] No mapping resolved for client_id=%s ml_item_id=%r ml_variation_id=%r",
+            client_id,
+            normalized_item_id,
+            ml_variation_id,
+        )
+    # If no mapping found by exact item id + variation logic, try matching by numeric suffix
+    if mapping is None:
+        digits_match = re.search(r"(\d+)$", normalized_item_id)
+        if digits_match:
+            numeric_suffix = digits_match.group(1)
+            logger.info(
+                "[ML][MAPPING] Trying suffix match for numeric id=%s client_id=%s",
+                numeric_suffix,
+                client_id,
+            )
+            alt_query = select(MLProductMapping).where(
+                MLProductMapping.client_id == client_id,
+                MLProductMapping.is_active.is_(True),
+                MLProductMapping.ml_item_id.ilike(f"%{numeric_suffix}"),
+            )
+            alt_result = await db.execute(alt_query)
+            alt_mappings = list(alt_result.scalars().all())
+            logger.info(
+                "[ML][MAPPING] suffix candidates=%s",
+                [f"{m.ml_item_id}:{m.ml_variation_id}" for m in alt_mappings],
+            )
+            if alt_mappings:
+                # prefer exact variation match among candidates
+                if normalized_variation_id is not None:
+                    mapping = next(
+                        (
+                            item
+                            for item in alt_mappings
+                            if normalize_ml_variation_id(item.ml_variation_id) == normalized_variation_id
+                        ),
+                        None,
+                    )
+                if mapping is None:
+                    mapping = alt_mappings[0]
+
     if mapping is None:
         return None
     return await db.get(Product, mapping.product_id)
