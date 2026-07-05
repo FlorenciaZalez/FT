@@ -1,3 +1,5 @@
+from decimal import Decimal, ROUND_HALF_UP
+
 from sqlalchemy import select, func, cast, String, literal, text
 from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -11,6 +13,13 @@ from app.auth.models import UserRole
 from app.common.exceptions import NotFoundError, ConflictError, ForbiddenError
 from app.integrations.mercadolibre.models import MercadoLibreAccount
 from app.shipping.models import ShippingCategory
+
+
+def _normalize_fixed_storage_m3(value: float | int | str | None) -> Decimal | None:
+    if value in (None, ""):
+        return None
+    normalized = Decimal(str(value)).quantize(Decimal("0.001"), rounding=ROUND_HALF_UP)
+    return normalized if normalized > Decimal("0.000") else None
 
 
 def _client_with_relations():
@@ -63,6 +72,7 @@ def _client_base_query_with_shipping_category(include_shipping_category: bool):
         cast(Client.__table__.c.plan, String).label("plan"),
         Client.is_active,
         func.coalesce(Client.variable_storage_enabled, False).label("variable_storage_enabled"),
+        Client.fixed_storage_m3,
         (
             cast(Client.__table__.c.shipping_category, String)
             if include_shipping_category
@@ -129,6 +139,7 @@ async def _attach_client_relations(db: AsyncSession, rows: list[dict]) -> list[d
         payload["plan"] = payload.get("plan") or "basic"
         payload["is_active"] = bool(payload.get("is_active", True))
         payload["variable_storage_enabled"] = bool(payload.get("variable_storage_enabled", True))
+        payload["fixed_storage_m3"] = float(payload["fixed_storage_m3"]) if payload.get("fixed_storage_m3") is not None else None
         payload["shipping_category"] = payload.get("shipping_category") or "A"
         payload["billing_schedule"] = billing_schedule_map.get(payload["id"])
         payload["ml_account"] = ml_account_map.get(payload["id"])
@@ -171,6 +182,7 @@ async def create_client(db: AsyncSession, data: dict) -> Client:
             raise ConflictError(f"Tax ID {data['tax_id']} already registered")
 
     billing_day_of_month = data.pop("billing_day_of_month", None)
+    data["fixed_storage_m3"] = _normalize_fixed_storage_m3(data.get("fixed_storage_m3"))
     data["shipping_category"] = ShippingCategory(data.get("shipping_category", "A"))
     client = Client(**{**data, "plan": PlanType(data.get("plan", "basic"))})
     db.add(client)
@@ -192,13 +204,17 @@ async def update_client(db: AsyncSession, client_id: int, data: dict) -> Client:
     client = await _get_client_model(db, client_id)
     has_billing_day_of_month = "billing_day_of_month" in data
     billing_day_of_month = data.pop("billing_day_of_month", None) if has_billing_day_of_month else None
+    has_fixed_storage_m3 = "fixed_storage_m3" in data
+    if has_fixed_storage_m3:
+        data["fixed_storage_m3"] = _normalize_fixed_storage_m3(data.get("fixed_storage_m3"))
     for key, value in data.items():
-        if value is not None:
-            if key == "plan":
-                value = PlanType(value)
-            if key == "shipping_category":
-                value = ShippingCategory(value)
-            setattr(client, key, value)
+        if value is None and not (key == "fixed_storage_m3" and has_fixed_storage_m3):
+            continue
+        if key == "plan":
+            value = PlanType(value)
+        if key == "shipping_category":
+            value = ShippingCategory(value)
+        setattr(client, key, value)
     if has_billing_day_of_month:
         await _upsert_billing_schedule(db, client, billing_day_of_month)
     await db.flush()

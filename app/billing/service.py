@@ -557,6 +557,11 @@ def _calculate_storage_metrics_from_record(
     return total_m3, accumulated_m3, storage_amount, False
 
 
+def _client_fixed_storage_m3(client: Client) -> Decimal | None:
+    fixed_storage_m3 = _to_decimal(getattr(client, "fixed_storage_m3", None), THREEPLACES)
+    return fixed_storage_m3 if fixed_storage_m3 > Decimal("0.000") else None
+
+
 def _build_storage_report_rows_from_record(
     storage_record: ClientStorageRecord,
     start: datetime,
@@ -618,8 +623,18 @@ async def get_storage_daily_report(
             )
         )
     ).scalar_one_or_none()
+    default_fixed_storage_m3 = None if client.variable_storage_enabled else _client_fixed_storage_m3(client)
 
     if storage_record is not None:
+        current_m3, rows, storage_total = _build_storage_report_rows_from_record(
+            storage_record,
+            start,
+            days_in_month,
+            daily_rate_per_m3,
+            storage_rate,
+        )
+    elif default_fixed_storage_m3 is not None:
+        storage_record = type("FixedStorageRecord", (), {"storage_m3": default_fixed_storage_m3})()
         current_m3, rows, storage_total = _build_storage_report_rows_from_record(
             storage_record,
             start,
@@ -1171,6 +1186,7 @@ async def _build_preview_rows(
     for client in clients:
         override = override_map.get(client.id)
         storage_record = storage_map.get(client.id)
+        default_fixed_storage_m3 = None if client.variable_storage_enabled else _client_fixed_storage_m3(client)
         storage_base_rate = _to_decimal(global_rates.storage_per_m3)
         storage_discount_pct = _to_decimal(override.storage_discount_pct if override and override.storage_discount_pct is not None else 0)
         storage_rate = _apply_discount(storage_base_rate, storage_discount_pct)
@@ -1181,6 +1197,12 @@ async def _build_preview_rows(
         if storage_record is not None:
             total_m3, accumulated_m3, storage_amount, missing_storage = _calculate_storage_metrics_from_record(
                 storage_record,
+                storage_rate,
+            )
+        elif default_fixed_storage_m3 is not None:
+            fixed_storage_record = type("FixedStorageRecord", (), {"storage_m3": default_fixed_storage_m3})()
+            total_m3, accumulated_m3, storage_amount, missing_storage = _calculate_storage_metrics_from_record(
+                fixed_storage_record,
                 storage_rate,
             )
         else:

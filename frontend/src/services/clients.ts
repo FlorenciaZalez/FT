@@ -23,6 +23,7 @@ export interface Client {
   plan: string;
   is_active: boolean;
   variable_storage_enabled: boolean;
+  fixed_storage_m3: number | null;
   shipping_category: 'A' | 'B' | 'C';
   created_at: string;
   updated_at: string;
@@ -41,6 +42,7 @@ export interface ClientCreatePayload {
   plan?: string;
   billing_day_of_month?: number;
   variable_storage_enabled?: boolean;
+  fixed_storage_m3?: number | null;
   shipping_category?: 'A' | 'B' | 'C';
 }
 
@@ -56,6 +58,7 @@ export interface ClientUpdatePayload {
   is_active?: boolean;
   billing_day_of_month?: number;
   variable_storage_enabled?: boolean;
+  fixed_storage_m3?: number | null;
   shipping_category?: 'A' | 'B' | 'C';
 }
 

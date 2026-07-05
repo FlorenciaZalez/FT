@@ -32,6 +32,7 @@ export default function ClientEdit() {
   const [contactPhone, setContactPhone] = useState('');
   const [plan, setPlan] = useState('basic');
   const [storageMode, setStorageMode] = useState<'fixed' | 'variable'>('fixed');
+  const [fixedStorageM3, setFixedStorageM3] = useState('');
   const [shippingCategory, setShippingCategory] = useState<'A' | 'B' | 'C'>('A');
 
   useEffect(() => {
@@ -47,6 +48,7 @@ export default function ClientEdit() {
         setContactPhone(data.contact_phone ?? '');
         setPlan(data.plan);
         setStorageMode(data.variable_storage_enabled ? 'variable' : 'fixed');
+        setFixedStorageM3(data.fixed_storage_m3 == null ? '' : String(data.fixed_storage_m3));
         setShippingCategory(data.shipping_category ?? 'A');
       })
       .catch(() => setError('Error al cargar el cliente'))
@@ -69,6 +71,7 @@ export default function ClientEdit() {
       contact_phone: contactPhone || undefined,
       plan,
       variable_storage_enabled: storageMode === 'variable',
+      fixed_storage_m3: storageMode === 'fixed' ? (fixedStorageM3.trim() === '' ? null : Number(fixedStorageM3)) : null,
       shipping_category: shippingCategory,
     };
 
@@ -254,6 +257,21 @@ export default function ClientEdit() {
                 </span>
               </span>
             </label>
+            {storageMode === 'fixed' && (
+              <div>
+                <label className="block text-sm font-medium text-gray-900 mb-1">m3 fijo mensual</label>
+                <input
+                  type="number"
+                  min="0.001"
+                  step="0.001"
+                  value={fixedStorageM3}
+                  onChange={(e) => setFixedStorageM3(e.target.value)}
+                  className="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none bg-white transition"
+                  placeholder="1.000"
+                />
+                <p className="text-xs text-gray-500 mt-1">Se aplica automáticamente cuando no hay una ocupación manual cargada para ese período.</p>
+              </div>
+            )}
           </div>
 
           <div className="flex gap-3 pt-2">

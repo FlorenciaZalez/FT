@@ -351,6 +351,7 @@ function EditClientModal({
     String(client.billing_schedule?.day_of_month ?? 5),
   );
   const [variableStorageEnabled, setVariableStorageEnabled] = useState(client.variable_storage_enabled ?? false);
+  const [fixedStorageM3, setFixedStorageM3] = useState(client.fixed_storage_m3 == null ? '' : String(client.fixed_storage_m3));
   const [shippingCategory, setShippingCategory] = useState<'A' | 'B' | 'C'>(client.shipping_category ?? 'A');
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState('');
@@ -371,6 +372,7 @@ function EditClientModal({
         plan,
         billing_day_of_month: Number(billingDayOfMonth),
         variable_storage_enabled: variableStorageEnabled,
+        fixed_storage_m3: variableStorageEnabled ? null : (fixedStorageM3.trim() === '' ? null : Number(fixedStorageM3)),
         shipping_category: shippingCategory,
       });
       onSaved();
@@ -498,6 +500,20 @@ function EditClientModal({
                 </span>
               </span>
             </label>
+            {!variableStorageEnabled && (
+              <div className="mt-4">
+                <label className="block text-sm font-medium text-gray-900 mb-1">m3 fijo mensual</label>
+                <input
+                  type="number"
+                  min="0.001"
+                  step="0.001"
+                  value={fixedStorageM3}
+                  onChange={(e) => setFixedStorageM3(e.target.value)}
+                  className="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none bg-white"
+                  placeholder="1.000"
+                />
+              </div>
+            )}
           </div>
           <div className="flex gap-3 pt-2">
             <button type="button" onClick={onClose}
@@ -531,6 +547,7 @@ function CreateClientForm({
   const [contactPhoneOperational, setContactPhoneOperational] = useState('');
   const [billingDayOfMonth, setBillingDayOfMonth] = useState('5');
   const [storageMode, setStorageMode] = useState<'fixed' | 'variable'>('fixed');
+  const [fixedStorageM3, setFixedStorageM3] = useState('');
   const [shippingCategory, setShippingCategory] = useState<'A' | 'B' | 'C'>('A');
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState('');
@@ -550,6 +567,7 @@ function CreateClientForm({
         contact_phone_operational: contactPhoneOperational || undefined,
         billing_day_of_month: Number(billingDayOfMonth),
         variable_storage_enabled: storageMode === 'variable',
+        fixed_storage_m3: storageMode === 'fixed' ? (fixedStorageM3.trim() === '' ? null : Number(fixedStorageM3)) : null,
         shipping_category: shippingCategory,
       });
       onCreated();
@@ -687,6 +705,21 @@ function CreateClientForm({
               </span>
             </span>
           </label>
+          {storageMode === 'fixed' && (
+            <div>
+              <label className="block text-sm font-medium text-gray-900 mb-1">m3 fijo mensual</label>
+              <input
+                type="number"
+                min="0.001"
+                step="0.001"
+                value={fixedStorageM3}
+                onChange={(e) => setFixedStorageM3(e.target.value)}
+                className="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none bg-white"
+                placeholder="1.000"
+              />
+              <p className="text-xs text-gray-500 mt-1">Si no cargás una ocupación manual para el período, se va a facturar este valor por defecto.</p>
+            </div>
+          )}
         </div>
         <div className="flex gap-2 pt-2">
           <button type="button" onClick={onCancel}
