@@ -4,6 +4,7 @@ from calendar import monthrange
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal, ROUND_HALF_UP
+import logging
 
 from sqlalchemy import Numeric, cast, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -32,6 +33,8 @@ from app.orders.models import Order, OrderItem, OrderStatus
 from app.products.models import Product
 from app.stock.models import Stock
 from app.stock.movement_models import MovementType, StockMovement
+
+logger = logging.getLogger(__name__)
 
 TWOPLACES = Decimal("0.01")
 THREEPLACES = Decimal("0.001")
@@ -350,6 +353,68 @@ def _rewind_quantities_to_day(
     return state
 
 
+def _collect_invalid_movement_product_ids(
+    movement_rows: list[dict],
+    product_volumes: dict[int, Decimal],
+    end: datetime,
+) -> set[int]:
+    invalid_product_ids: set[int] = set()
+    for movement in movement_rows:
+        created_at = movement["created_at"]
+        movement_day = created_at.astimezone(timezone.utc).date() if created_at.tzinfo else created_at.date()
+        if int(movement["quantity"] or 0) != 0 and product_volumes.get(movement["product_id"], Decimal("0.0000")) <= Decimal("0.0000") and movement_day < end.date():
+            invalid_product_ids.add(int(movement["product_id"]))
+    return invalid_product_ids
+
+
+def _collect_invalid_period_end_stock_product_ids(
+    current_quantities: dict[int, int],
+    movement_rows: list[dict],
+    product_volumes: dict[int, Decimal],
+    billable_end_day: date,
+) -> set[int]:
+    quantities_at_period_end = _rewind_quantities_to_day(current_quantities, movement_rows, billable_end_day)
+    return {
+        int(product_id)
+        for product_id, quantity in quantities_at_period_end.items()
+        if quantity > 0 and product_volumes.get(product_id, Decimal("0.0000")) <= Decimal("0.0000")
+    }
+
+
+async def _log_missing_storage_products(
+    db: AsyncSession,
+    client_id: int,
+    period: str,
+    reason: str,
+    product_ids: set[int],
+) -> None:
+    if not product_ids:
+        logger.warning(
+            "Storage billing missing data for client_id=%s period=%s reason=%s but no product ids were resolved",
+            client_id,
+            period,
+            reason,
+        )
+        return
+
+    rows = (
+        await db.execute(
+            select(Product.id, Product.sku, Product.name).where(Product.id.in_(sorted(product_ids))).order_by(Product.id)
+        )
+    ).all()
+    product_summary = ", ".join(
+        f"id={product_id} sku={sku or '-'} name={name or '-'}"
+        for product_id, sku, name in rows
+    )
+    logger.warning(
+        "Storage billing missing data for client_id=%s period=%s reason=%s products=[%s]",
+        client_id,
+        period,
+        reason,
+        product_summary,
+    )
+
+
 async def _build_variable_storage_daily_rows(
     db: AsyncSession,
     client_id: int,
@@ -411,14 +476,10 @@ async def _build_variable_storage_daily_rows(
     )
 
     movement_rows: list[dict] = []
-    missing_dimensions = False
     for product_id, quantity, created_at, volume_m3, width_cm, height_cm, depth_cm in movement_result.all():
         resolved_volume = _resolve_storage_volume(volume_m3, width_cm, height_cm, depth_cm)
         current_quantities.setdefault(product_id, 0)
         product_volumes[product_id] = resolved_volume
-        movement_day = created_at.astimezone(timezone.utc).date() if created_at.tzinfo else created_at.date()
-        if int(quantity or 0) != 0 and resolved_volume <= Decimal("0.0000") and movement_day < end.date():
-            missing_dimensions = True
         movement_rows.append(
             {
                 "product_id": product_id,
@@ -428,17 +489,25 @@ async def _build_variable_storage_daily_rows(
         )
 
     current_total_m3 = _total_volume_for_quantities(current_quantities, product_volumes)
-    if missing_dimensions:
+    invalid_movement_product_ids = _collect_invalid_movement_product_ids(movement_rows, product_volumes, end)
+    if invalid_movement_product_ids:
+        await _log_missing_storage_products(
+            db,
+            client_id,
+            period,
+            "movement-volume-unresolved",
+            invalid_movement_product_ids,
+        )
         return current_total_m3, [], True
 
     last_day_of_month = (end - timedelta(days=1)).date()
     billable_end_day = min(effective_end.date(), last_day_of_month)
-    quantities_at_period_end = _rewind_quantities_to_day(current_quantities, movement_rows, billable_end_day)
-    if any(
-        quantity > 0 and product_volumes.get(product_id, Decimal("0.0000")) <= Decimal("0.0000")
-        for product_id, quantity in quantities_at_period_end.items()
-    ):
-        missing_dimensions = True
+    invalid_period_end_stock_product_ids = _collect_invalid_period_end_stock_product_ids(
+        current_quantities,
+        movement_rows,
+        product_volumes,
+        billable_end_day,
+    )
 
     daily_volumes = _build_daily_storage_volumes(
         current_quantities,
@@ -448,7 +517,14 @@ async def _build_variable_storage_daily_rows(
         billable_end_day,
     )
     daily_dates = [start.date() + timedelta(days=index) for index in range(len(daily_volumes))]
-    if missing_dimensions:
+    if invalid_period_end_stock_product_ids:
+        await _log_missing_storage_products(
+            db,
+            client_id,
+            period,
+            "period-end-stock-volume-unresolved",
+            invalid_period_end_stock_product_ids,
+        )
         return current_total_m3, [], True
     return current_total_m3, list(zip(daily_dates, daily_volumes)), False
 
