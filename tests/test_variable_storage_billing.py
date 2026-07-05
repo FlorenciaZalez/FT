@@ -4,6 +4,7 @@ from decimal import Decimal
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
+import app.models  # noqa: F401
 from app.billing import service
 from app.common.exceptions import BadRequestError
 
@@ -42,6 +43,49 @@ class VariableStorageBillingTests(unittest.TestCase):
 
 
 class VariableStorageBillingAsyncTests(unittest.IsolatedAsyncioTestCase):
+    async def test_generate_single_document_only_checks_target_client_missing_storage(self) -> None:
+        ok_preview = SimpleNamespace(
+            client=SimpleNamespace(id=9, name="Nicolas Luvara"),
+            accumulated_m3=Decimal("32.485"),
+            storage_amount=Decimal("12000.00"),
+            preparation_amount=Decimal("0.00"),
+            product_creation_amount=Decimal("354.00"),
+            label_print_amount=Decimal("711.00"),
+            transport_dispatch_amount=Decimal("0.00"),
+            truck_unloading_amount=Decimal("0.00"),
+            manual_charge_amount=Decimal("0.00"),
+            shipping_amount=Decimal("0.00"),
+            total=Decimal("13065.00"),
+            missing_storage=False,
+        )
+        missing_preview = SimpleNamespace(
+            client=SimpleNamespace(id=2, name="Emilio Mazzucotelli"),
+            missing_storage=True,
+        )
+
+        empty_scalars = SimpleNamespace(scalars=lambda: SimpleNamespace(all=lambda: []))
+        db = SimpleNamespace(
+            execute=AsyncMock(side_effect=[empty_scalars, empty_scalars]),
+            flush=AsyncMock(),
+            refresh=AsyncMock(),
+            get=AsyncMock(return_value=SimpleNamespace(id=9, name="Nicolas Luvara")),
+            add=lambda value: None,
+        )
+
+        with (
+            patch("app.billing.service._ensure_historical_billing_records", AsyncMock()),
+            patch("app.billing.service._build_preview_rows", AsyncMock(return_value=[missing_preview, ok_preview])),
+            patch("app.billing.service._calculate_due_date", return_value=date(2026, 7, 4)),
+            patch("app.billing.service.date") as mocked_date,
+        ):
+            mocked_date.today.return_value = date(2026, 7, 5)
+            mocked_date.side_effect = lambda *args, **kwargs: date(*args, **kwargs)
+            documents = await service.generate_billing_documents(db, "2026-06", overwrite=True, client_id=9)
+
+        self.assertEqual(len(documents), 1)
+        self.assertEqual(documents[0].client_id, 9)
+        self.assertEqual(documents[0].storage_total, Decimal("12000.00"))
+
     async def test_historical_period_ignores_invalid_stock_added_after_month_end(self) -> None:
         quantity_rows = SimpleNamespace(all=lambda: [(1, 5, None, None, None, None)])
         movement_rows = SimpleNamespace(

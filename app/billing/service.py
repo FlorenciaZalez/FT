@@ -1452,12 +1452,6 @@ async def generate_billing_documents(
     if not previews:
         return []
 
-    missing_storage_clients = [preview.client.name for preview in previews if preview.missing_storage]
-    if missing_storage_clients:
-        raise BadRequestError(
-            "Faltan datos de almacenamiento para: " + ", ".join(missing_storage_clients)
-        )
-
     if client_id is not None:
         previews = [preview for preview in previews if preview.client.id == client_id]
         if not previews:
@@ -1465,6 +1459,12 @@ async def generate_billing_documents(
             if client is None:
                 raise NotFoundError(f"Client {client_id} not found")
             raise BadRequestError("No hay datos de facturación para ese cliente en el período seleccionado")
+
+    missing_storage_clients = [preview.client.name for preview in previews if preview.missing_storage]
+    if missing_storage_clients:
+        raise BadRequestError(
+            "Faltan datos de almacenamiento para: " + ", ".join(missing_storage_clients)
+        )
 
     client_ids = [preview.client.id for preview in previews]
     existing_documents = (
