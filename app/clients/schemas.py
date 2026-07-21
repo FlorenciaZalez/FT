@@ -14,6 +14,7 @@ class ClientCreate(BaseModel):
     billing_day_of_month: int | None = Field(default=None, ge=1, le=31)
     variable_storage_enabled: bool = True
     fixed_storage_m3: float | None = Field(default=None, gt=0)
+    fixed_storage_amount: float | None = Field(default=None, gt=0)
     shipping_category: str = Field(default="A", pattern=r"^[ABC]$")
 
 
@@ -30,6 +31,7 @@ class ClientUpdate(BaseModel):
     billing_day_of_month: int | None = Field(default=None, ge=1, le=31)
     variable_storage_enabled: bool | None = None
     fixed_storage_m3: float | None = Field(default=None, gt=0)
+    fixed_storage_amount: float | None = Field(default=None, gt=0)
     shipping_category: str | None = Field(default=None, pattern=r"^[ABC]$")
 
 
@@ -63,6 +65,7 @@ class ClientResponse(BaseModel):
     is_active: bool
     variable_storage_enabled: bool = True
     fixed_storage_m3: float | None = None
+    fixed_storage_amount: float | None = None
     shipping_category: str = "A"
     created_at: datetime
     updated_at: datetime

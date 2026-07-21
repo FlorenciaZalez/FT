@@ -562,6 +562,19 @@ def _client_fixed_storage_m3(client: Client) -> Decimal | None:
     return fixed_storage_m3 if fixed_storage_m3 > Decimal("0.000") else None
 
 
+def _client_fixed_storage_amount(client: Client) -> Decimal | None:
+    fixed_storage_amount = _to_decimal(getattr(client, "fixed_storage_amount", None))
+    return fixed_storage_amount if fixed_storage_amount > Decimal("0.00") else None
+
+
+def _calculate_fixed_storage_metrics(
+    storage_m3: Decimal | None,
+    fixed_storage_amount: Decimal,
+) -> tuple[Decimal, Decimal, Decimal, bool]:
+    total_m3 = _to_decimal(storage_m3, THREEPLACES)
+    return total_m3, total_m3, _to_decimal(fixed_storage_amount), False
+
+
 def _build_storage_report_rows_from_record(
     storage_record: ClientStorageRecord,
     start: datetime,
@@ -591,6 +604,31 @@ def _build_storage_report_rows_from_record(
         row["amount"] = float(amount)
 
     return current_m3, rows, storage_total
+
+
+def _build_fixed_storage_report_rows(
+    current_m3: Decimal,
+    start: datetime,
+    days_in_month: int,
+    storage_total: Decimal,
+) -> list[dict]:
+    rounded_daily_amount = _to_decimal(storage_total / Decimal(days_in_month))
+    rows = []
+    running_total = Decimal("0.00")
+    for index in range(days_in_month):
+        amount = rounded_daily_amount
+        if index == days_in_month - 1:
+            amount = _to_decimal(storage_total - running_total)
+        else:
+            running_total = _to_decimal(running_total + amount)
+        rows.append(
+            {
+                "date": start.date() + timedelta(days=index),
+                "volume_m3": float(current_m3),
+                "amount": float(amount),
+            }
+        )
+    return rows
 
 
 async def get_storage_daily_report(
@@ -624,8 +662,18 @@ async def get_storage_daily_report(
         )
     ).scalar_one_or_none()
     default_fixed_storage_m3 = None if client.variable_storage_enabled else _client_fixed_storage_m3(client)
+    fixed_storage_amount = None if client.variable_storage_enabled else _client_fixed_storage_amount(client)
 
-    if storage_record is not None:
+    if fixed_storage_amount is not None:
+        report_storage_m3 = (
+            _to_decimal(storage_record.storage_m3, THREEPLACES)
+            if storage_record is not None
+            else _to_decimal(default_fixed_storage_m3, THREEPLACES)
+        )
+        current_m3 = report_storage_m3
+        rows = _build_fixed_storage_report_rows(current_m3, start, days_in_month, fixed_storage_amount)
+        storage_total = fixed_storage_amount
+    elif storage_record is not None:
         current_m3, rows, storage_total = _build_storage_report_rows_from_record(
             storage_record,
             start,
@@ -1187,6 +1235,7 @@ async def _build_preview_rows(
         override = override_map.get(client.id)
         storage_record = storage_map.get(client.id)
         default_fixed_storage_m3 = None if client.variable_storage_enabled else _client_fixed_storage_m3(client)
+        fixed_storage_amount = None if client.variable_storage_enabled else _client_fixed_storage_amount(client)
         storage_base_rate = _to_decimal(global_rates.storage_per_m3)
         storage_discount_pct = _to_decimal(override.storage_discount_pct if override and override.storage_discount_pct is not None else 0)
         storage_rate = _apply_discount(storage_base_rate, storage_discount_pct)
@@ -1194,7 +1243,17 @@ async def _build_preview_rows(
         shipping_discount_pct = _to_decimal(override.shipping_discount_pct if override and override.shipping_discount_pct is not None else 0)
         shipping_multiplier = _discount_multiplier(shipping_discount_pct)
 
-        if storage_record is not None:
+        if fixed_storage_amount is not None:
+            storage_m3 = (
+                _to_decimal(storage_record.storage_m3, THREEPLACES)
+                if storage_record is not None
+                else default_fixed_storage_m3
+            )
+            total_m3, accumulated_m3, storage_amount, missing_storage = _calculate_fixed_storage_metrics(
+                storage_m3,
+                fixed_storage_amount,
+            )
+        elif storage_record is not None:
             total_m3, accumulated_m3, storage_amount, missing_storage = _calculate_storage_metrics_from_record(
                 storage_record,
                 storage_rate,

@@ -22,6 +22,13 @@ def _normalize_fixed_storage_m3(value: float | int | str | None) -> Decimal | No
     return normalized if normalized > Decimal("0.000") else None
 
 
+def _normalize_fixed_storage_amount(value: float | int | str | None) -> Decimal | None:
+    if value in (None, ""):
+        return None
+    normalized = Decimal(str(value)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+    return normalized if normalized > Decimal("0.00") else None
+
+
 def _client_with_relations():
     return select(Client).options(
         selectinload(Client.ml_account),
@@ -73,6 +80,7 @@ def _client_base_query_with_shipping_category(include_shipping_category: bool):
         Client.is_active,
         func.coalesce(Client.variable_storage_enabled, False).label("variable_storage_enabled"),
         Client.fixed_storage_m3,
+        Client.fixed_storage_amount,
         (
             cast(Client.__table__.c.shipping_category, String)
             if include_shipping_category
@@ -140,6 +148,7 @@ async def _attach_client_relations(db: AsyncSession, rows: list[dict]) -> list[d
         payload["is_active"] = bool(payload.get("is_active", True))
         payload["variable_storage_enabled"] = bool(payload.get("variable_storage_enabled", True))
         payload["fixed_storage_m3"] = float(payload["fixed_storage_m3"]) if payload.get("fixed_storage_m3") is not None else None
+        payload["fixed_storage_amount"] = float(payload["fixed_storage_amount"]) if payload.get("fixed_storage_amount") is not None else None
         payload["shipping_category"] = payload.get("shipping_category") or "A"
         payload["billing_schedule"] = billing_schedule_map.get(payload["id"])
         payload["ml_account"] = ml_account_map.get(payload["id"])
@@ -183,6 +192,7 @@ async def create_client(db: AsyncSession, data: dict) -> Client:
 
     billing_day_of_month = data.pop("billing_day_of_month", None)
     data["fixed_storage_m3"] = _normalize_fixed_storage_m3(data.get("fixed_storage_m3"))
+    data["fixed_storage_amount"] = _normalize_fixed_storage_amount(data.get("fixed_storage_amount"))
     data["shipping_category"] = ShippingCategory(data.get("shipping_category", "A"))
     client = Client(**{**data, "plan": PlanType(data.get("plan", "basic"))})
     db.add(client)
@@ -207,8 +217,14 @@ async def update_client(db: AsyncSession, client_id: int, data: dict) -> Client:
     has_fixed_storage_m3 = "fixed_storage_m3" in data
     if has_fixed_storage_m3:
         data["fixed_storage_m3"] = _normalize_fixed_storage_m3(data.get("fixed_storage_m3"))
+    has_fixed_storage_amount = "fixed_storage_amount" in data
+    if has_fixed_storage_amount:
+        data["fixed_storage_amount"] = _normalize_fixed_storage_amount(data.get("fixed_storage_amount"))
     for key, value in data.items():
-        if value is None and not (key == "fixed_storage_m3" and has_fixed_storage_m3):
+        if value is None and not (
+            (key == "fixed_storage_m3" and has_fixed_storage_m3)
+            or (key == "fixed_storage_amount" and has_fixed_storage_amount)
+        ):
             continue
         if key == "plan":
             value = PlanType(value)

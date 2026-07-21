@@ -352,6 +352,7 @@ function EditClientModal({
   );
   const [variableStorageEnabled, setVariableStorageEnabled] = useState(client.variable_storage_enabled ?? false);
   const [fixedStorageM3, setFixedStorageM3] = useState(client.fixed_storage_m3 == null ? '' : String(client.fixed_storage_m3));
+  const [fixedStorageAmount, setFixedStorageAmount] = useState(client.fixed_storage_amount == null ? '' : String(client.fixed_storage_amount));
   const [shippingCategory, setShippingCategory] = useState<'A' | 'B' | 'C'>(client.shipping_category ?? 'A');
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState('');
@@ -373,6 +374,7 @@ function EditClientModal({
         billing_day_of_month: Number(billingDayOfMonth),
         variable_storage_enabled: variableStorageEnabled,
         fixed_storage_m3: variableStorageEnabled ? null : (fixedStorageM3.trim() === '' ? null : Number(fixedStorageM3)),
+        fixed_storage_amount: variableStorageEnabled ? null : (fixedStorageAmount.trim() === '' ? null : Number(fixedStorageAmount)),
         shipping_category: shippingCategory,
       });
       onSaved();
@@ -501,8 +503,15 @@ function EditClientModal({
               </span>
             </label>
             {!variableStorageEnabled && (
-              <div className="mt-4">
-                <label className="block text-sm font-medium text-gray-900 mb-1">m3 fijo mensual</label>
+              <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                <label className="block text-sm font-medium text-gray-900 mb-1">Abono mensual ($)</label>
+                <input type="number" min="0.01" step="0.01" value={fixedStorageAmount}
+                  onChange={(e) => setFixedStorageAmount(e.target.value)}
+                  className="w-full px-4 py-2.5 border border-gray-200 rounded-lg bg-white" placeholder="25000" />
+                </div>
+                <div>
+                <label className="block text-sm font-medium text-gray-900 mb-1">m3 de referencia</label>
                 <input
                   type="number"
                   min="0.001"
@@ -512,6 +521,7 @@ function EditClientModal({
                   className="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none bg-white"
                   placeholder="1.000"
                 />
+                </div>
               </div>
             )}
           </div>
@@ -548,6 +558,7 @@ function CreateClientForm({
   const [billingDayOfMonth, setBillingDayOfMonth] = useState('5');
   const [storageMode, setStorageMode] = useState<'fixed' | 'variable'>('fixed');
   const [fixedStorageM3, setFixedStorageM3] = useState('');
+  const [fixedStorageAmount, setFixedStorageAmount] = useState('');
   const [shippingCategory, setShippingCategory] = useState<'A' | 'B' | 'C'>('A');
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState('');
@@ -568,6 +579,7 @@ function CreateClientForm({
         billing_day_of_month: Number(billingDayOfMonth),
         variable_storage_enabled: storageMode === 'variable',
         fixed_storage_m3: storageMode === 'fixed' ? (fixedStorageM3.trim() === '' ? null : Number(fixedStorageM3)) : null,
+        fixed_storage_amount: storageMode === 'fixed' ? (fixedStorageAmount.trim() === '' ? null : Number(fixedStorageAmount)) : null,
         shipping_category: shippingCategory,
       });
       onCreated();
@@ -706,8 +718,16 @@ function CreateClientForm({
             </span>
           </label>
           {storageMode === 'fixed' && (
-            <div>
-              <label className="block text-sm font-medium text-gray-900 mb-1">m3 fijo mensual</label>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+              <label className="block text-sm font-medium text-gray-900 mb-1">Abono mensual ($)</label>
+              <input type="number" min="0.01" step="0.01" value={fixedStorageAmount}
+                onChange={(e) => setFixedStorageAmount(e.target.value)}
+                className="w-full px-4 py-2.5 border border-gray-200 rounded-lg bg-white" placeholder="25000" />
+              <p className="text-xs text-gray-500 mt-1">Se factura todos los meses.</p>
+              </div>
+              <div>
+              <label className="block text-sm font-medium text-gray-900 mb-1">m3 de referencia (opcional)</label>
               <input
                 type="number"
                 min="0.001"
@@ -717,7 +737,7 @@ function CreateClientForm({
                 className="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none bg-white"
                 placeholder="1.000"
               />
-              <p className="text-xs text-gray-500 mt-1">Si no cargás una ocupación manual para el período, se va a facturar este valor por defecto.</p>
+              </div>
             </div>
           )}
         </div>

@@ -33,6 +33,7 @@ export default function ClientEdit() {
   const [plan, setPlan] = useState('basic');
   const [storageMode, setStorageMode] = useState<'fixed' | 'variable'>('fixed');
   const [fixedStorageM3, setFixedStorageM3] = useState('');
+  const [fixedStorageAmount, setFixedStorageAmount] = useState('');
   const [shippingCategory, setShippingCategory] = useState<'A' | 'B' | 'C'>('A');
 
   useEffect(() => {
@@ -49,6 +50,7 @@ export default function ClientEdit() {
         setPlan(data.plan);
         setStorageMode(data.variable_storage_enabled ? 'variable' : 'fixed');
         setFixedStorageM3(data.fixed_storage_m3 == null ? '' : String(data.fixed_storage_m3));
+        setFixedStorageAmount(data.fixed_storage_amount == null ? '' : String(data.fixed_storage_amount));
         setShippingCategory(data.shipping_category ?? 'A');
       })
       .catch(() => setError('Error al cargar el cliente'))
@@ -72,6 +74,7 @@ export default function ClientEdit() {
       plan,
       variable_storage_enabled: storageMode === 'variable',
       fixed_storage_m3: storageMode === 'fixed' ? (fixedStorageM3.trim() === '' ? null : Number(fixedStorageM3)) : null,
+      fixed_storage_amount: storageMode === 'fixed' ? (fixedStorageAmount.trim() === '' ? null : Number(fixedStorageAmount)) : null,
       shipping_category: shippingCategory,
     };
 
@@ -258,8 +261,22 @@ export default function ClientEdit() {
               </span>
             </label>
             {storageMode === 'fixed' && (
-              <div>
-                <label className="block text-sm font-medium text-gray-900 mb-1">m3 fijo mensual</label>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                <label className="block text-sm font-medium text-gray-900 mb-1">Abono mensual ($)</label>
+                <input
+                  type="number"
+                  min="0.01"
+                  step="0.01"
+                  value={fixedStorageAmount}
+                  onChange={(e) => setFixedStorageAmount(e.target.value)}
+                  className="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none bg-white transition"
+                  placeholder="25000"
+                />
+                <p className="text-xs text-gray-500 mt-1">Este importe se factura todos los meses.</p>
+                </div>
+                <div>
+                <label className="block text-sm font-medium text-gray-900 mb-1">m3 de referencia (opcional)</label>
                 <input
                   type="number"
                   min="0.001"
@@ -269,7 +286,8 @@ export default function ClientEdit() {
                   className="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none bg-white transition"
                   placeholder="1.000"
                 />
-                <p className="text-xs text-gray-500 mt-1">Se aplica automáticamente cuando no hay una ocupación manual cargada para ese período.</p>
+                <p className="text-xs text-gray-500 mt-1">Solo se usa para informar la ocupación.</p>
+                </div>
               </div>
             )}
           </div>

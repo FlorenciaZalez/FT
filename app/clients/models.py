@@ -29,6 +29,7 @@ class Client(Base):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     variable_storage_enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False, server_default="true")
     fixed_storage_m3: Mapped[float | None] = mapped_column(Numeric(14, 3))
+    fixed_storage_amount: Mapped[float | None] = mapped_column(Numeric(14, 2))
     shipping_category: Mapped[ShippingCategory] = mapped_column(
         SHIPPING_CATEGORY_ENUM,
         default=ShippingCategory.A,
