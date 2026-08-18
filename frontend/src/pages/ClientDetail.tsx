@@ -7,9 +7,11 @@ import {
   deleteClientStorageRecord,
   fetchBillingPreview,
   fetchClientStorageRecords,
+  fetchStorageDailyReport,
   updateClientStorageRecord,
   type BillingPreviewItem,
   type ClientStorageRecord,
+  type StorageDailyReport,
 } from '../services/billing';
 import { fetchProducts } from '../services/products';
 import { fetchOrders, type Order } from '../services/orders';
@@ -60,6 +62,7 @@ export default function ClientDetail() {
   const [stockItems, setStockItems] = useState<StockSummaryItem[]>([]);
   const [storageRecords, setStorageRecords] = useState<ClientStorageRecord[]>([]);
   const [currentBillingPreview, setCurrentBillingPreview] = useState<BillingPreviewItem | null>(null);
+  const [currentStorageReport, setCurrentStorageReport] = useState<StorageDailyReport | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [activeTab, setActiveTab] = useState<TabKey>('pedidos');
@@ -88,12 +91,13 @@ export default function ClientDetail() {
 
         setClient(clientData);
 
-        const [ordersResult, productsResult, stockResult, storageResult, previewResult] = await Promise.allSettled([
+        const [ordersResult, productsResult, stockResult, storageResult, previewResult, storageReportResult] = await Promise.allSettled([
           fetchOrders(),
           fetchProducts(),
           fetchStockSummary(),
           fetchClientStorageRecords({ client_id: clientId }),
           fetchBillingPreview(targetPeriod),
+          fetchStorageDailyReport(clientId, targetPeriod),
         ]);
 
         if (cancelled) return;
@@ -127,6 +131,12 @@ export default function ClientDetail() {
           );
         } else {
           setCurrentBillingPreview(null);
+        }
+
+        if (storageReportResult.status === 'fulfilled') {
+          setCurrentStorageReport(storageReportResult.value);
+        } else {
+          setCurrentStorageReport(null);
         }
       })
       .catch(() => {
@@ -167,6 +177,9 @@ export default function ClientDetail() {
     : null;
   const isVariableStorage = Boolean(client.variable_storage_enabled);
   const currentStorageRecord = storageRecords.find((record) => record.period === currentPeriod);
+  const storageReferenceM3 = currentStorageReport
+    ? currentStorageReport.rows.reduce((maxVolume, row) => Math.max(maxVolume, row.volume_m3), 0)
+    : 0;
 
   const reloadStorageRecords = async () => {
     if (!id) return;
@@ -523,19 +536,19 @@ export default function ClientDetail() {
             </>
           ) : (
             <>
-          {currentBillingPreview && (
+          {currentStorageReport && (
             <div className="mx-4 mt-4 rounded-xl border border-blue-200 bg-blue-50 px-4 py-3">
               <p className="text-sm font-semibold text-blue-700">Este cliente se factura con abono fijo mensual</p>
               <p className="text-sm text-blue-700 mt-1">
-                {`${currentBillingPreview.total_m3.toFixed(3)} m3 actuales para ${formatPeriodLabel(currentPeriod)}.`}
+                {`${currentStorageReport.current_m3.toFixed(3)} m3 actuales para ${formatPeriodLabel(currentPeriod)}.`}
               </p>
-              {currentBillingPreview.accumulated_m3 > currentBillingPreview.total_m3 + 0.0005 && (
+              {storageReferenceM3 > currentStorageReport.current_m3 + 0.0005 && (
                 <p className="text-sm text-blue-700 mt-1">
-                  {`Para la liquidación del período se toma ${currentBillingPreview.accumulated_m3.toFixed(3)} m3 como pico mensual.`}
+                  {`Para la liquidación del período se toma ${storageReferenceM3.toFixed(3)} m3 como pico mensual.`}
                 </p>
               )}
               <p className="text-sm text-blue-700 mt-1">
-                {`El cobro del período sigue siendo fijo: ${formatCurrency(currentBillingPreview.storage_amount)}.`}
+                {`El cobro del período sigue siendo fijo: ${formatCurrency(currentStorageReport.storage_total)}.`}
               </p>
             </div>
           )}
