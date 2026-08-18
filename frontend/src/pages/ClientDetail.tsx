@@ -176,7 +176,6 @@ export default function ClientDetail() {
     ? orders.reduce((latest, o) => (new Date(o.created_at) > new Date(latest.created_at) ? o : latest))
     : null;
   const isVariableStorage = Boolean(client.variable_storage_enabled);
-  const currentStorageRecord = storageRecords.find((record) => record.period === currentPeriod);
   const storageReferenceM3 = currentStorageReport
     ? currentStorageReport.rows.reduce((maxVolume, row) => Math.max(maxVolume, row.volume_m3), 0)
     : 0;
