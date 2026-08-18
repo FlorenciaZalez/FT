@@ -575,6 +575,48 @@ def _calculate_fixed_storage_metrics(
     return total_m3, total_m3, _to_decimal(fixed_storage_amount), False
 
 
+async def _calculate_fixed_storage_preview_metrics(
+    db: AsyncSession,
+    client_id: int,
+    period: str,
+    storage_record: ClientStorageRecord | None,
+    default_fixed_storage_m3: Decimal | None,
+    fixed_storage_amount: Decimal,
+) -> tuple[Decimal, Decimal, Decimal, bool]:
+    if storage_record is not None or default_fixed_storage_m3 is not None:
+        storage_m3 = (
+            _to_decimal(storage_record.storage_m3, THREEPLACES)
+            if storage_record is not None
+            else default_fixed_storage_m3
+        )
+        return _calculate_fixed_storage_metrics(storage_m3, fixed_storage_amount)
+
+    current_total_m3, _daily_rows, missing_storage = await _build_variable_storage_daily_rows(
+        db,
+        client_id,
+        period,
+    )
+    total_m3, accumulated_m3, storage_amount, _ = _calculate_fixed_storage_metrics(
+        current_total_m3,
+        fixed_storage_amount,
+    )
+    return total_m3, accumulated_m3, storage_amount, missing_storage
+
+
+def _calculate_month_peak_storage_metrics(
+    current_total_m3: Decimal,
+    daily_rows: list[tuple[date, Decimal]],
+    storage_rate: Decimal,
+) -> tuple[Decimal, Decimal, Decimal, bool]:
+    if not daily_rows:
+        return _to_decimal(current_total_m3, THREEPLACES), Decimal("0.000"), Decimal("0.00"), False
+
+    peak_m3 = max((_to_decimal(volume, THREEPLACES) for _, volume in daily_rows), default=Decimal("0.000"))
+    total_m3 = _to_decimal(current_total_m3, THREEPLACES)
+    storage_amount = _to_decimal(peak_m3 * storage_rate)
+    return total_m3, peak_m3, storage_amount, False
+
+
 def _build_storage_report_rows_from_record(
     storage_record: ClientStorageRecord,
     start: datetime,
@@ -690,6 +732,16 @@ async def get_storage_daily_report(
             daily_rate_per_m3,
             storage_rate,
         )
+    elif not client.variable_storage_enabled:
+        current_total_m3, daily_rows, missing_storage = await _build_variable_storage_daily_rows(db, client.id, validated_period)
+        if missing_storage:
+            raise BadRequestError("Faltan datos de almacenamiento para este cliente en el período seleccionado")
+        current_m3, peak_m3, storage_total, _ = _calculate_month_peak_storage_metrics(
+            current_total_m3,
+            daily_rows,
+            storage_rate,
+        )
+        rows = _build_fixed_storage_report_rows(peak_m3, start, days_in_month, storage_total)
     else:
         current_m3, daily_rows, missing_storage = await _build_variable_storage_daily_rows(db, client.id, validated_period)
         if missing_storage:
@@ -974,6 +1026,18 @@ async def _build_preview_rows(
         if user.client_id is None:
             return []
         clients_query = clients_query.where(Client.id == user.client_id)
+
+
+async def _calculate_non_variable_storage_metrics(
+    db: AsyncSession,
+    client_id: int,
+    period: str,
+    storage_rate: Decimal,
+) -> tuple[Decimal, Decimal, Decimal, bool]:
+    current_total_m3, daily_rows, missing_storage = await _build_variable_storage_daily_rows(db, client_id, period)
+    if missing_storage:
+        return current_total_m3, Decimal("0.000"), Decimal("0.00"), True
+    return _calculate_month_peak_storage_metrics(current_total_m3, daily_rows, storage_rate)
     clients = (await db.execute(clients_query)).scalars().all()
     if not clients:
         return []
@@ -1244,13 +1308,12 @@ async def _build_preview_rows(
         shipping_multiplier = _discount_multiplier(shipping_discount_pct)
 
         if fixed_storage_amount is not None:
-            storage_m3 = (
-                _to_decimal(storage_record.storage_m3, THREEPLACES)
-                if storage_record is not None
-                else default_fixed_storage_m3
-            )
-            total_m3, accumulated_m3, storage_amount, missing_storage = _calculate_fixed_storage_metrics(
-                storage_m3,
+            total_m3, accumulated_m3, storage_amount, missing_storage = await _calculate_fixed_storage_preview_metrics(
+                db,
+                client.id,
+                period,
+                storage_record,
+                default_fixed_storage_m3,
                 fixed_storage_amount,
             )
         elif storage_record is not None:
@@ -1262,6 +1325,13 @@ async def _build_preview_rows(
             fixed_storage_record = type("FixedStorageRecord", (), {"storage_m3": default_fixed_storage_m3})()
             total_m3, accumulated_m3, storage_amount, missing_storage = _calculate_storage_metrics_from_record(
                 fixed_storage_record,
+                storage_rate,
+            )
+        elif not client.variable_storage_enabled:
+            total_m3, accumulated_m3, storage_amount, missing_storage = await _calculate_non_variable_storage_metrics(
+                db,
+                client.id,
+                period,
                 storage_rate,
             )
         else:

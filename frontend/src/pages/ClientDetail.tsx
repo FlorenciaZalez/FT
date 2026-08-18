@@ -436,14 +436,14 @@ export default function ClientDetail() {
         <Section
           title="Ocupación mensual"
           count={storageRecords.length}
-          action={!isVariableStorage ? (
+          action={(
             <button
               onClick={openCreateStorageModal}
               className="ui-btn-primary px-3 py-1.5 text-xs font-medium rounded-lg"
             >
-              + Cargar ocupación
+              {isVariableStorage ? '+ Cargar ocupación manual' : '+ Cargar ocupación'}
             </button>
-          ) : undefined}
+          )}
         >
           {isVariableStorage ? (
             <>
@@ -462,6 +462,9 @@ export default function ClientDetail() {
                   <p className="text-sm text-yellow-800 mt-1">
                     Finanzas calcula los m3 automáticos con los datos de volumen de cada producto. Si faltan medidas, el total puede quedar por debajo del stock real.
                   </p>
+                  <p className="text-sm text-yellow-800 mt-2">
+                    Si necesitás facturar igual este mes, cargá una ocupación manual para usarla como override en el remito.
+                  </p>
                 </div>
               )}
 
@@ -476,6 +479,7 @@ export default function ClientDetail() {
                         <th className="text-left px-4 py-2 font-medium text-gray-500">Período</th>
                         <th className="text-right px-4 py-2 font-medium text-gray-500">m3</th>
                         <th className="text-left px-4 py-2 font-medium text-gray-500">Actualizado</th>
+                        <th className="text-right px-4 py-2 font-medium text-gray-500">Acciones</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -484,6 +488,32 @@ export default function ClientDetail() {
                           <td className="px-4 py-3 font-medium text-gray-900">{formatPeriodLabel(record.period)}</td>
                           <td className="px-4 py-3 text-right text-gray-900">{record.storage_m3.toFixed(3)}</td>
                           <td className="px-4 py-3 text-gray-500 text-xs">{new Date(record.updated_at).toLocaleString('es-AR')}</td>
+                          <td className="px-4 py-3">
+                            <div className="flex justify-end gap-2">
+                              <button
+                                onClick={() => openEditStorageModal(record)}
+                                className="px-3 py-1.5 text-xs font-medium text-blue-700 bg-blue-50 rounded-lg hover:bg-blue-50 transition"
+                              >
+                                Editar
+                              </button>
+                              <button
+                                onClick={async () => {
+                                  if (!window.confirm(`¿Eliminar la ocupación de ${formatPeriodLabel(record.period)}?`)) return;
+                                  setStorageError('');
+                                  try {
+                                    await deleteClientStorageRecord(record.id);
+                                    await reloadStorageRecords();
+                                    setSuccessMessage('Ocupación eliminada.');
+                                  } catch (err: unknown) {
+                                    setStorageError(getApiErrorMessage(err, 'No se pudo eliminar la ocupación.'));
+                                  }
+                                }}
+                                className="px-3 py-1.5 text-xs font-medium text-red-700 bg-red-50 rounded-lg hover:bg-red-50 transition"
+                              >
+                                Eliminar
+                              </button>
+                            </div>
+                          </td>
                         </tr>
                       ))}
                     </tbody>
@@ -493,6 +523,23 @@ export default function ClientDetail() {
             </>
           ) : (
             <>
+          {currentBillingPreview && (
+            <div className="mx-4 mt-4 rounded-xl border border-blue-200 bg-blue-50 px-4 py-3">
+              <p className="text-sm font-semibold text-blue-700">Este cliente se factura con abono fijo mensual</p>
+              <p className="text-sm text-blue-700 mt-1">
+                {`${currentBillingPreview.total_m3.toFixed(3)} m3 actuales para ${formatPeriodLabel(currentPeriod)}.`}
+              </p>
+              {currentBillingPreview.accumulated_m3 > currentBillingPreview.total_m3 + 0.0005 && (
+                <p className="text-sm text-blue-700 mt-1">
+                  {`Para la liquidación del período se toma ${currentBillingPreview.accumulated_m3.toFixed(3)} m3 como pico mensual.`}
+                </p>
+              )}
+              <p className="text-sm text-blue-700 mt-1">
+                {`El cobro del período sigue siendo fijo: ${formatCurrency(currentBillingPreview.storage_amount)}.`}
+              </p>
+            </div>
+          )}
+
           {!currentStorageRecord && (
             <div className="mx-4 mt-4 rounded-xl border border-yellow-200 bg-yellow-50 px-4 py-3">
               <p className="text-sm font-semibold text-yellow-800">Falta cargar la ocupación de este mes</p>
@@ -795,6 +842,14 @@ function formatPeriodLabel(period: string) {
 
 function formatCurrentPeriod(date: Date) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+}
+
+function formatCurrency(value: number) {
+  return new Intl.NumberFormat('es-AR', {
+    style: 'currency',
+    currency: 'ARS',
+    maximumFractionDigits: 2,
+  }).format(value);
 }
 
 function getApiErrorMessage(error: unknown, fallback: string) {

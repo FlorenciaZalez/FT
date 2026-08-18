@@ -148,7 +148,7 @@ class VariableStorageBillingAsyncTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(report["rows"]), 31)
         self.assertAlmostEqual(sum(row["amount"] for row in report["rows"]), 9000.0, places=2)
 
-    async def test_storage_daily_report_falls_back_to_variable_when_manual_record_missing(self) -> None:
+    async def test_storage_daily_report_uses_fixed_month_reference_when_manual_record_missing(self) -> None:
         client = SimpleNamespace(id=7, name="Cliente Demo", variable_storage_enabled=False)
         user = SimpleNamespace(id=1)
         global_rates = SimpleNamespace(storage_per_m3=Decimal("3000.00"))
@@ -183,8 +183,9 @@ class VariableStorageBillingAsyncTests(unittest.IsolatedAsyncioTestCase):
 
         build_daily_rows.assert_awaited_once_with(db, client.id, "2026-07")
         self.assertEqual(report["current_m3"], 2.5)
-        self.assertEqual(report["storage_total"], 483.88)
-        self.assertEqual(len(report["rows"]), 2)
+        self.assertEqual(report["storage_total"], 7500.0)
+        self.assertEqual(len(report["rows"]), 31)
+        self.assertTrue(all(row["volume_m3"] == 2.5 for row in report["rows"]))
 
     async def test_storage_daily_report_uses_client_fixed_storage_default(self) -> None:
         client = SimpleNamespace(
@@ -249,6 +250,105 @@ class VariableStorageBillingAsyncTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(report["current_m3"], 2.0)
         self.assertEqual(report["storage_total"], 25000.0)
         self.assertAlmostEqual(sum(row["amount"] for row in report["rows"]), 25000.0, places=2)
+
+    async def test_fixed_storage_preview_falls_back_to_stock_volume_when_reference_missing(self) -> None:
+        db = SimpleNamespace()
+
+        with patch(
+            "app.billing.service._build_variable_storage_daily_rows",
+            AsyncMock(
+                return_value=(
+                    Decimal("4.250"),
+                    [(date(2026, 8, 1), Decimal("4.250"))],
+                    False,
+                )
+            ),
+        ) as build_daily_rows:
+            total_m3, accumulated_m3, storage_amount, missing_storage = await service._calculate_fixed_storage_preview_metrics(
+                db,
+                client_id=5,
+                period="2026-08",
+                storage_record=None,
+                default_fixed_storage_m3=None,
+                fixed_storage_amount=Decimal("25000.00"),
+            )
+
+        build_daily_rows.assert_awaited_once_with(db, 5, "2026-08")
+        self.assertEqual(total_m3, Decimal("4.250"))
+        self.assertEqual(accumulated_m3, Decimal("4.250"))
+        self.assertEqual(storage_amount, Decimal("25000.00"))
+        self.assertFalse(missing_storage)
+
+    async def test_non_variable_storage_metrics_use_peak_month_volume(self) -> None:
+        db = SimpleNamespace()
+
+        with patch(
+            "app.billing.service._build_variable_storage_daily_rows",
+            AsyncMock(
+                return_value=(
+                    Decimal("3.000"),
+                    [
+                        (date(2026, 8, 1), Decimal("3.000")),
+                        (date(2026, 8, 2), Decimal("4.000")),
+                    ],
+                    False,
+                )
+            ),
+        ):
+            total_m3, accumulated_m3, storage_amount, missing_storage = await service._calculate_non_variable_storage_metrics(
+                db,
+                client_id=5,
+                period="2026-08",
+                storage_rate=Decimal("3000.00"),
+            )
+
+        self.assertEqual(total_m3, Decimal("3.000"))
+        self.assertEqual(accumulated_m3, Decimal("4.000"))
+        self.assertEqual(storage_amount, Decimal("12000.00"))
+        self.assertFalse(missing_storage)
+
+    async def test_storage_daily_report_for_non_variable_client_uses_peak_month_volume(self) -> None:
+        client = SimpleNamespace(
+            id=7,
+            name="Cristian Maglio",
+            variable_storage_enabled=False,
+            fixed_storage_m3=None,
+            fixed_storage_amount=None,
+        )
+        user = SimpleNamespace(id=1)
+        global_rates = SimpleNamespace(storage_per_m3=Decimal("3000.00"))
+        db = SimpleNamespace(
+            get=AsyncMock(return_value=client),
+            execute=AsyncMock(
+                side_effect=[
+                    SimpleNamespace(scalar_one_or_none=lambda: None),
+                    SimpleNamespace(scalar_one_or_none=lambda: None),
+                ]
+            ),
+        )
+
+        with (
+            patch("app.billing.service.check_tenant_access"),
+            patch("app.billing.service._get_or_create_global_rates", AsyncMock(return_value=global_rates)),
+            patch(
+                "app.billing.service._build_variable_storage_daily_rows",
+                AsyncMock(
+                    return_value=(
+                        Decimal("3.000"),
+                        [
+                            (date(2026, 8, 1), Decimal("3.000")),
+                            (date(2026, 8, 2), Decimal("4.000")),
+                        ],
+                        False,
+                    )
+                ),
+            ),
+        ):
+            report = await service.get_storage_daily_report(db, user, client.id, "2026-08")
+
+        self.assertEqual(report["current_m3"], 3.0)
+        self.assertEqual(report["storage_total"], 12000.0)
+        self.assertTrue(all(row["volume_m3"] == 4.0 for row in report["rows"]))
 
     async def test_manual_storage_record_overrides_variable_missing_storage_in_preview(self) -> None:
         storage_record = SimpleNamespace(client_id=9, storage_m3=Decimal("1.500"))

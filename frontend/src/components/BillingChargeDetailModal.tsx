@@ -1,6 +1,18 @@
 import type { Charge } from '../services/billing';
 import { formatCurrency, formatNumber, getChargeStatusLabel } from '../utils/billingFormat';
 
+function buildStorageNote(charge: Charge): string {
+  const usesPeakMonthReference =
+    charge.accumulated_m3 > charge.total_m3 + 0.0005 &&
+    Math.abs(charge.storage_amount - charge.accumulated_m3 * charge.applied_storage_rate) < 0.05;
+
+  if (usesPeakMonthReference) {
+    return `Base ${formatCurrency(charge.base_storage_rate)} · Desc ${formatNumber(charge.storage_discount_pct, 2)}% · Final ${formatCurrency(charge.applied_storage_rate)} · ${formatNumber(charge.total_m3, 3)} m3 actuales · Referencia de cobro ${formatNumber(charge.accumulated_m3, 3)} m3 (pico del mes)`;
+  }
+
+  return `Base ${formatCurrency(charge.base_storage_rate)} · Desc ${formatNumber(charge.storage_discount_pct, 2)}% · Final ${formatCurrency(charge.applied_storage_rate)} · ${formatNumber(charge.total_m3, 3)} m3 actuales`;
+}
+
 export default function BillingChargeDetailModal({
   charge,
   loading,
@@ -31,7 +43,7 @@ export default function BillingChargeDetailModal({
               <BreakdownCard
                 label="Almacenamiento"
                 value={formatCurrency(charge.storage_amount)}
-                note={`Base ${formatCurrency(charge.base_storage_rate)} · Desc ${formatNumber(charge.storage_discount_pct, 2)}% · Final ${formatCurrency(charge.applied_storage_rate)} · ${formatNumber(charge.total_m3, 3)} m3 actuales`}
+                note={buildStorageNote(charge)}
               />
               <BreakdownCard
                 label="Preparación"

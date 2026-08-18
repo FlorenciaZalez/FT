@@ -33,6 +33,23 @@ type EditableClientRate = {
 
 type DocumentStatusFilter = 'all' | 'pending' | 'paid' | 'overdue';
 
+function buildStorageDetail(item: BillingPreviewItem): string {
+  const currentM3 = toFiniteNumber(item.total_m3);
+  const referenceM3 = toFiniteNumber(item.accumulated_m3);
+  const storageAmount = toFiniteNumber(item.storage_amount);
+  const storageRate = toFiniteNumber(item.storage_rate);
+  const usesPeakMonthReference =
+    referenceM3 > currentM3 + 0.0005 &&
+    Math.abs(storageAmount - referenceM3 * storageRate) < 0.05;
+
+  const rateDetail = `Tarifa aplicada ${formatCurrency(storageRate)} por m3/mes${toFiniteNumber(item.storage_discount_pct) > 0 ? ` (base ${formatCurrency(toFiniteNumber(item.storage_base_rate))} - desc ${formatNumber(toFiniteNumber(item.storage_discount_pct), 2)}%)` : ''}`;
+  if (usesPeakMonthReference) {
+    return `${formatNumber(currentM3, 3)} m3 actuales · Referencia de cobro ${formatNumber(referenceM3, 3)} m3 (pico del mes) · ${rateDetail}`;
+  }
+
+  return `${formatNumber(currentM3, 3)} m3 actuales · ${rateDetail} · Prorrateo diario en el mes`;
+}
+
 export default function Billing() {
   const { user } = useAuth();
   const navigate = useNavigate();
@@ -581,7 +598,7 @@ export default function Billing() {
                     {
                       label: 'Storage',
                       amount: toFiniteNumber(item.storage_amount),
-                      detail: `${formatNumber(toFiniteNumber(item.total_m3), 3)} m3 actuales · Tarifa aplicada ${formatCurrency(toFiniteNumber(item.storage_rate))} por m3/mes${toFiniteNumber(item.storage_discount_pct) > 0 ? ` (base ${formatCurrency(toFiniteNumber(item.storage_base_rate))} - desc ${formatNumber(toFiniteNumber(item.storage_discount_pct), 2)}%)` : ''} · Prorrateo diario en el mes`,
+                      detail: buildStorageDetail(item),
                     },
                     {
                       label: 'Preparación',
@@ -654,8 +671,9 @@ export default function Billing() {
                                 event.stopPropagation();
                                 handleGenerateSingleDocument(item.client_id).catch(() => {});
                               }}
-                              disabled={generatingClientId === item.client_id}
-                              className="px-3 py-1.5 text-xs font-medium text-blue-700 bg-blue-50 rounded-lg hover:bg-blue-100 transition disabled:opacity-50"
+                              disabled={generatingClientId === item.client_id || item.missing_storage}
+                              title={item.missing_storage ? 'Completá los datos de almacenamiento antes de generar el remito.' : undefined}
+                              className="px-3 py-1.5 text-xs font-medium text-blue-700 bg-blue-50 rounded-lg hover:bg-blue-100 transition disabled:opacity-50 disabled:cursor-not-allowed"
                             >
                               {generatingClientId === item.client_id ? 'Generando...' : 'Generar remito'}
                             </button>

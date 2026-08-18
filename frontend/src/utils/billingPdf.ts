@@ -34,6 +34,14 @@ function buildFileName(prefix: string): string {
   return `${prefix}-${stamp}.pdf`;
 }
 
+function buildStorageChargeDescription(totalM3: number, accumulatedM3: number, storageAmount: number, storageRate: number, storageDiscountPct: number): string {
+  const usesPeakMonthReference = accumulatedM3 > totalM3 + 0.0005 && Math.abs(storageAmount - accumulatedM3 * storageRate) < 0.05;
+  if (usesPeakMonthReference) {
+    return `${totalM3.toFixed(3)} m3 actuales / referencia ${accumulatedM3.toFixed(3)} m3 pico del mes / tarifa ${formatCurrency(storageRate)} / desc ${storageDiscountPct}%`;
+  }
+  return `${totalM3.toFixed(3)} m3 actuales / tarifa ${formatCurrency(storageRate)} / desc ${storageDiscountPct}%`;
+}
+
 export function downloadChargesPdf(charges: Charge[], title: string, filePrefix = 'historial-cobros'): void {
   if (charges.length === 0) {
     throw new Error('No hay cobros para exportar.');
@@ -82,7 +90,7 @@ export function downloadChargesPdf(charges: Charge[], title: string, filePrefix 
     doc.text(`Vencimiento: ${formatCalendarDate(charge.due_date)}`, margin + 55, cursorY + 14);
     doc.text(`Estado: ${getChargeStatusLabel(charge.status)}`, margin + 108, cursorY + 14);
 
-    doc.text(`Almacenamiento: ${formatCurrency(charge.storage_amount)} (${charge.total_m3.toFixed(3)} m3 actuales / tarifa ${formatCurrency(charge.applied_storage_rate)} / desc ${charge.storage_discount_pct}%)`, margin + 4, cursorY + 22);
+    doc.text(`Almacenamiento: ${formatCurrency(charge.storage_amount)} (${buildStorageChargeDescription(charge.total_m3, charge.accumulated_m3, charge.storage_amount, charge.applied_storage_rate, charge.storage_discount_pct)})`, margin + 4, cursorY + 22);
     doc.text(`Preparacion: ${formatCurrency(charge.preparation_amount)} (primer producto ${formatCurrency(charge.base_preparation_rate)} / adicional ${formatCurrency(charge.applied_preparation_rate)})`, margin + 4, cursorY + 27);
     doc.text(`Alta producto: ${formatCurrency(charge.product_creation_amount)}`, margin + 4, cursorY + 32);
     doc.text(`Traslados a transporte: ${formatCurrency(charge.transport_dispatch_amount)}`, margin + 4, cursorY + 37);
@@ -122,7 +130,7 @@ export async function downloadBillingDocumentPdf(document: BillingDocument, prev
       label: 'Storage',
       amount: document.storage_total,
       detail: preview
-        ? `${preview.total_m3.toLocaleString('es-AR', { minimumFractionDigits: 3, maximumFractionDigits: 3 })} m3 actuales · tarifa ${formatCurrency(preview.storage_rate)}`
+        ? buildStorageChargeDescription(preview.total_m3, preview.accumulated_m3, document.storage_total, preview.storage_rate, preview.storage_discount_pct).replaceAll(' / ', ' · ')
         : undefined,
     },
     {
