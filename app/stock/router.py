@@ -78,13 +78,14 @@ async def adjust_stock(
 
 @router.get("/summary", response_model=list[StockSummaryItem])
 async def stock_summary(
+    client_id: int | None = Query(None, ge=1),
     skip: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=200),
     user: User = Depends(require_any),
     db: AsyncSession = Depends(get_db),
 ):
     """Resumen de stock por producto y ubicación."""
-    return await service.get_stock_summary(db, user, skip, limit)
+    return await service.get_stock_summary(db, user, skip, limit, client_id=client_id)
 
 
 @router.get("/movements")

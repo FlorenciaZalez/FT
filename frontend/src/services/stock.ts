@@ -40,6 +40,11 @@ export interface StockFilters {
   status?: 'available' | 'out_of_stock' | 'low_stock' | '';
 }
 
+export interface StockSummaryFilters {
+  clientId?: number | null;
+  limit?: number;
+}
+
 export async function fetchStock(filters: StockFilters = {}): Promise<StockItem[]> {
   const params: Record<string, string | number> = {};
   if (filters.search?.trim()) params.search = filters.search.trim();
@@ -70,8 +75,11 @@ export interface StockSummaryItem {
   min_stock_alert: number;
 }
 
-export async function fetchStockSummary(): Promise<StockSummaryItem[]> {
-  const { data } = await api.get<StockSummaryItem[]>('/stock/summary');
+export async function fetchStockSummary(filters: StockSummaryFilters = {}): Promise<StockSummaryItem[]> {
+  const params: Record<string, string | number> = {};
+  if (filters.clientId) params.client_id = filters.clientId;
+  if (filters.limit) params.limit = filters.limit;
+  const { data } = await api.get<StockSummaryItem[]>('/stock/summary', { params });
   return data;
 }
 

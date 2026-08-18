@@ -94,7 +94,7 @@ export default function ClientDetail() {
         const [ordersResult, productsResult, stockResult, storageResult, previewResult, storageReportResult] = await Promise.allSettled([
           fetchOrders(),
           fetchProducts(),
-          fetchStockSummary(),
+          fetchStockSummary({ clientId, limit: 200 }),
           fetchClientStorageRecords({ client_id: clientId }),
           fetchBillingPreview(targetPeriod),
           fetchStorageDailyReport(clientId, targetPeriod),
@@ -549,15 +549,6 @@ export default function ClientDetail() {
               )}
               <p className="text-sm text-blue-700 mt-1">
                 {`El cobro del período sigue siendo fijo: ${formatCurrency(currentStorageReport.storage_total)}.`}
-              </p>
-            </div>
-          )}
-
-          {!currentStorageRecord && (
-            <div className="mx-4 mt-4 rounded-xl border border-yellow-200 bg-yellow-50 px-4 py-3">
-              <p className="text-sm font-semibold text-yellow-800">Falta cargar la ocupación de este mes</p>
-              <p className="text-sm text-yellow-800 mt-1">
-                Registrá el m3 de {formatPeriodLabel(currentPeriod)} para que el cliente entre en la facturación automática.
               </p>
             </div>
           )}

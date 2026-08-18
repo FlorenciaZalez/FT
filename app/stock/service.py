@@ -299,7 +299,11 @@ async def dispatch_stock(
 # ──────────────────────────────────────────────
 
 async def get_stock_summary(
-    db: AsyncSession, user: User, skip: int = 0, limit: int = 50,
+    db: AsyncSession,
+    user: User,
+    skip: int = 0,
+    limit: int = 50,
+    client_id: int | None = None,
 ) -> list[dict]:
     query = (
         select(
@@ -316,6 +320,8 @@ async def get_stock_summary(
         .join(WarehouseLocation, Stock.location_id == WarehouseLocation.id)
     )
     query = tenant_filter(query, Stock, user)
+    if client_id is not None:
+        query = query.where(Stock.client_id == client_id)
     query = query.order_by(Product.sku).offset(skip).limit(limit)
 
     result = await db.execute(query)
