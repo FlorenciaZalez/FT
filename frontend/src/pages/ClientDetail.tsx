@@ -463,8 +463,8 @@ export default function ClientDetail() {
               <div className="mx-4 mt-4 rounded-xl border border-blue-200 bg-blue-50 px-4 py-3">
                 <p className="text-sm font-semibold text-blue-700">La ocupación de este cliente se calcula automáticamente por stock</p>
                 <p className="text-sm text-blue-700 mt-1">
-                  {currentBillingPreview
-                    ? `${currentBillingPreview.total_m3.toFixed(3)} m3 actuales para ${formatPeriodLabel(currentPeriod)}.`
+                  {currentStorageReport
+                    ? `${currentStorageReport.current_m3.toFixed(3)} m3 actuales para ${formatPeriodLabel(currentPeriod)}.`
                     : `Todavía no hay un resumen automático disponible para ${formatPeriodLabel(currentPeriod)}.`}
                 </p>
               </div>
