@@ -50,6 +50,10 @@ function normalizeSku(value: string): string {
   return value.trim().toLowerCase();
 }
 
+function getTodayDateInputValue(): string {
+  return new Date().toISOString().slice(0, 10);
+}
+
 function formatCurrency(value: number): string {
   return new Intl.NumberFormat('es-AR', {
     style: 'currency',
@@ -539,9 +543,14 @@ export default function StockPage() {
           clientMap={clientMap}
           preselectedProductId={preselectedProductId}
           onClose={() => setShowInModal(false)}
-          onSubmit={async (productId, quantity, reason, notes, labelOptions) => {
+          onSubmit={async (productId, quantity, reason, notes, movementDate, labelOptions) => {
             const fullReason = notes ? `${reason} — ${notes}` : reason;
-            const result = await addStock({ product_id: productId, quantity, reason: fullReason || undefined });
+            const result = await addStock({
+              product_id: productId,
+              quantity,
+              reason: fullReason || undefined,
+              movement_date: movementDate,
+            });
             let summary = `Ingreso exitoso: +${quantity} unidades de "${result.product_name}" (stock actual: ${result.new_quantity})`;
 
             if (labelOptions?.enabled) {
@@ -574,9 +583,14 @@ export default function StockPage() {
           clientMap={clientMap}
           preselectedProductId={preselectedProductId}
           onClose={() => setShowOutModal(false)}
-          onSubmit={async (productId, quantity, reason, notes) => {
+          onSubmit={async (productId, quantity, reason, notes, movementDate) => {
             const fullReason = notes ? `${reason} — ${notes}` : reason;
-            const result = await removeStock({ product_id: productId, quantity, reason: fullReason || undefined });
+            const result = await removeStock({
+              product_id: productId,
+              quantity,
+              reason: fullReason || undefined,
+              movement_date: movementDate,
+            });
             handleSuccess(
               `Egreso exitoso: -${quantity} unidades de "${result.product_name}" (stock actual: ${result.new_quantity})`
             );
@@ -1586,6 +1600,7 @@ function StockMoveModal({
     quantity: number,
     reason: string,
     notes: string,
+    movementDate: string,
     labelOptions?: { enabled: boolean; quantity: number },
   ) => Promise<void>;
 }) {
@@ -1599,6 +1614,7 @@ function StockMoveModal({
   const [printLabels, setPrintLabels] = useState(false);
   const [reason, setReason] = useState('');
   const [notes, setNotes] = useState('');
+  const [movementDate, setMovementDate] = useState(getTodayDateInputValue());
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState('');
 
@@ -1717,6 +1733,10 @@ function StockMoveModal({
       setFormError('Seleccioná un motivo');
       return;
     }
+    if (!movementDate) {
+      setFormError(`Seleccioná una fecha de ${isIn ? 'ingreso' : 'egreso'}`);
+      return;
+    }
     if (exceedsStock) {
       setFormError('No hay suficiente stock disponible');
       return;
@@ -1729,6 +1749,7 @@ function StockMoveModal({
         qty,
         reason,
         notes,
+        movementDate,
         isIn && printLabels
           ? { enabled: true, quantity: qty }
           : { enabled: false, quantity: 0 },
@@ -1861,6 +1882,22 @@ function StockMoveModal({
                 <p className="text-red-700 text-xs mt-1">No hay suficiente stock disponible (disponible: {availableStock})</p>
               )}
             </div>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-900 mb-1">
+              Fecha de {isIn ? 'ingreso' : 'egreso'}
+            </label>
+            <input
+              type="date"
+              required
+              value={movementDate}
+              onChange={(e) => setMovementDate(e.target.value)}
+              className="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+            />
+            <p className="text-xs text-gray-500 mt-1">
+              Esta fecha se usa para el historial y para calcular correctamente el almacenamiento del cliente.
+            </p>
           </div>
 
           {/* Contexto del producto seleccionado */}

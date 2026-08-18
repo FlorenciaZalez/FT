@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field
-from datetime import datetime
+from datetime import date, datetime
 
 
 # ── Simplified requests (no location needed) ──
@@ -8,12 +8,14 @@ class StockInRequest(BaseModel):
     product_id: int
     quantity: int = Field(gt=0)
     reason: str | None = None
+    movement_date: date | None = None
 
 
 class StockOutRequest(BaseModel):
     product_id: int
     quantity: int = Field(gt=0)
     reason: str | None = None
+    movement_date: date | None = None
 
 
 # ── List item for the stock table ──
@@ -38,6 +40,7 @@ class StockInboundRequest(BaseModel):
     location_id: int
     quantity: int
     notes: str | None = None
+    movement_date: date | None = None
 
 
 class StockAdjustRequest(BaseModel):

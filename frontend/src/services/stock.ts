@@ -17,12 +17,14 @@ export interface StockInPayload {
   product_id: number;
   quantity: number;
   reason?: string;
+  movement_date?: string;
 }
 
 export interface StockOutPayload {
   product_id: number;
   quantity: number;
   reason?: string;
+  movement_date?: string;
 }
 
 export interface StockMoveResult {

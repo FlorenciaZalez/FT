@@ -36,7 +36,7 @@ async def stock_in(
     db: AsyncSession = Depends(get_db),
 ):
     """Ingreso de stock."""
-    return await service.simple_inbound(db, user, body.product_id, body.quantity, body.reason)
+    return await service.simple_inbound(db, user, body.product_id, body.quantity, body.reason, body.movement_date)
 
 
 @router.post("/out", status_code=201)
@@ -46,7 +46,7 @@ async def stock_out(
     db: AsyncSession = Depends(get_db),
 ):
     """Egreso de stock. Valida que haya suficiente disponible."""
-    return await service.simple_outbound(db, user, body.product_id, body.quantity, body.reason)
+    return await service.simple_outbound(db, user, body.product_id, body.quantity, body.reason, body.movement_date)
 
 
 # ── Original detailed endpoints ──
@@ -60,7 +60,7 @@ async def inbound_stock(
 ):
     """Ingreso de mercadería al depósito."""
     return await service.inbound_stock(
-        db, user, body.product_id, body.location_id, body.quantity, body.notes
+        db, user, body.product_id, body.location_id, body.quantity, body.notes, body.movement_date
     )
 
 

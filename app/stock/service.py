@@ -1,3 +1,4 @@
+from datetime import date, datetime, time, timezone
 from decimal import Decimal, ROUND_HALF_UP
 
 from sqlalchemy import select, func, or_
@@ -77,7 +78,13 @@ async def _record_movement(
     reference_id: int | None = None,
     user_id: int | None = None,
     notes: str | None = None,
+    movement_date: date | None = None,
 ) -> StockMovement:
+    created_at = None
+    if movement_date is not None:
+        # Store manual dates at noon UTC so the calendar day stays stable across timezones.
+        created_at = datetime.combine(movement_date, time(hour=12), tzinfo=timezone.utc)
+
     movement = StockMovement(
         client_id=client_id,
         product_id=product_id,
@@ -87,6 +94,7 @@ async def _record_movement(
         reference_id=reference_id,
         performed_by=user_id,
         notes=notes,
+        created_at=created_at,
     )
     db.add(movement)
     return movement
@@ -116,7 +124,13 @@ def _ensure_product_storage_volume(product: Product) -> None:
 # ──────────────────────────────────────────────
 
 async def inbound_stock(
-    db: AsyncSession, user: User, product_id: int, location_id: int, quantity: int, notes: str | None = None,
+    db: AsyncSession,
+    user: User,
+    product_id: int,
+    location_id: int,
+    quantity: int,
+    notes: str | None = None,
+    movement_date: date | None = None,
 ) -> Stock:
     if quantity <= 0:
         raise BadRequestError("Quantity must be positive")
@@ -134,7 +148,7 @@ async def inbound_stock(
     await _record_movement(
         db, product.client_id, product_id,
         MovementType.inbound, quantity,
-        ReferenceType.inbound, user_id=user.id, notes=notes,
+        ReferenceType.inbound, user_id=user.id, notes=notes, movement_date=movement_date,
     )
 
     await db.flush()
@@ -409,7 +423,12 @@ async def get_stock_list(
 
 
 async def simple_inbound(
-    db: AsyncSession, user: User, product_id: int, quantity: int, reason: str | None = None,
+    db: AsyncSession,
+    user: User,
+    product_id: int,
+    quantity: int,
+    reason: str | None = None,
+    movement_date: date | None = None,
 ) -> dict:
     """Simplified stock inbound using default location."""
     if quantity <= 0:
@@ -428,7 +447,7 @@ async def simple_inbound(
     await _record_movement(
         db, product.client_id, product_id,
         MovementType.inbound, quantity,
-        ReferenceType.inbound, user_id=user.id, notes=reason,
+        ReferenceType.inbound, user_id=user.id, notes=reason, movement_date=movement_date,
     )
 
     await db.flush()
@@ -443,7 +462,12 @@ async def simple_inbound(
 
 
 async def simple_outbound(
-    db: AsyncSession, user: User, product_id: int, quantity: int, reason: str | None = None,
+    db: AsyncSession,
+    user: User,
+    product_id: int,
+    quantity: int,
+    reason: str | None = None,
+    movement_date: date | None = None,
 ) -> dict:
     """Simplified stock outbound (egress) using default location."""
     if quantity <= 0:
@@ -474,7 +498,7 @@ async def simple_outbound(
     await _record_movement(
         db, product.client_id, product_id,
         MovementType.outbound, -quantity,
-        ReferenceType.manual, user_id=user.id, notes=reason,
+        ReferenceType.manual, user_id=user.id, notes=reason, movement_date=movement_date,
     )
 
     await db.flush()
