@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal, ROUND_HALF_UP
 import logging
+from typing import Mapping, NotRequired, Sequence, TypedDict, cast as type_cast
 
 from sqlalchemy import Numeric, cast, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -29,7 +30,7 @@ from app.billing.models import (
 from app.clients.models import Client
 from app.common.exceptions import BadRequestError, NotFoundError
 from app.common.permissions import check_tenant_access
-from app.orders.models import Order, OrderItem, OrderStatus
+from app.orders.models import Order, OrderStatus
 from app.products.models import Product
 from app.stock.models import Stock
 from app.stock.movement_models import MovementType, StockMovement
@@ -46,6 +47,127 @@ VARIABLE_STORAGE_MOVEMENT_TYPES = (
     MovementType.outbound,
     MovementType.adjustment,
 )
+
+
+class _OrderMetrics(TypedDict):
+    total_orders: int
+    shipping_source_amount: Decimal
+
+
+class _AmountCountMetrics(TypedDict):
+    amount: Decimal
+    count: int
+
+
+class _ManualChargeItem(TypedDict):
+    id: int
+    descripcion: str | None
+    tipo: str | None
+    fecha: datetime
+    monto: float
+
+
+class _ChargeData(TypedDict):
+    id: int
+    client_id: int
+    client_name: str | None
+    period: str
+    total_m3: float
+    accumulated_m3: float
+    total_orders: int
+    base_storage_rate: float
+    storage_discount_pct: float
+    applied_storage_rate: float
+    base_preparation_rate: float
+    preparation_discount_pct: float
+    applied_preparation_rate: float
+    applied_shipping_base: float
+    applied_shipping_multiplier: float
+    shipping_base_amount: float
+    shipping_discount_pct: float
+    storage_amount: float
+    preparation_amount: float
+    product_creation_amount: float
+    label_print_amount: float
+    transport_dispatch_amount: float
+    truck_unloading_amount: float
+    manual_charge_amount: float
+    shipping_amount: float
+    total: float
+    status: ChargeStatus
+    due_date: date
+    created_at: datetime
+    updated_at: datetime
+
+
+class _BillingDocumentData(TypedDict):
+    id: int
+    client_id: int
+    client_name: str
+    period: str
+    accumulated_m3: float
+    storage_total: float
+    preparation_total: float
+    product_creation_total: float
+    label_print_total: float
+    transport_dispatch_total: float
+    truck_unloading_total: float
+    manual_charge_total: float
+    shipping_total: float
+    total: float
+    status: BillingDocumentStatus
+    due_date: date
+    created_at: datetime
+    updated_at: datetime
+
+
+class _TransportDispatchPayload(TypedDict):
+    client_id: int
+    transportista: str
+    cantidad_pedidos: int
+    fecha: date
+
+
+class _MerchandiseReceptionPayload(TypedDict):
+    client_id: int
+    cantidad_camiones: int
+    fecha: date
+    observaciones: NotRequired[str | None]
+
+
+class _ManualChargePayload(TypedDict):
+    client_id: int
+    monto: Decimal | float | int | None
+    fecha: date
+    periodo: str
+    descripcion: NotRequired[str | None]
+    tipo: NotRequired[str | None]
+
+
+class _BillingAlertsData(TypedDict):
+    due_soon_count: int
+    due_soon_days: int
+    overdue_count: int
+    due_soon_documents: list[_BillingDocumentData]
+    overdue_documents: list[_BillingDocumentData]
+
+
+class _MovementRow(TypedDict):
+    product_id: int
+    quantity: int
+    created_at: datetime
+
+
+class _StorageReportRow(TypedDict):
+    date: date
+    volume_m3: float
+    amount: float
+
+
+class _StorageRecordPayload(TypedDict):
+    client_id: int
+    period: str
+    storage_m3: Decimal | float | int | None
 
 
 @dataclass
@@ -77,7 +199,7 @@ class _ComputedCharge:
     truck_unloading_amount: Decimal
     truck_unloading_count: int
     manual_charge_amount: Decimal
-    manual_charge_items: list[dict]
+    manual_charge_items: list[_ManualChargeItem]
     shipping_amount: Decimal
     total: Decimal
     missing_storage: bool
@@ -95,7 +217,11 @@ def _to_decimal(value: Decimal | float | int | None, places: Decimal = TWOPLACES
     return decimal_value.quantize(places, rounding=ROUND_HALF_UP)
 
 
-def _serialize_charge(charge: Charge, client_name: str | None = None) -> dict:
+def _as_model_float(value: Decimal | float | int | None) -> float:
+    return type_cast(float, value)
+
+
+def _serialize_charge(charge: Charge, client_name: str | None = None) -> _ChargeData:
     return {
         "id": charge.id,
         "client_id": charge.client_id,
@@ -130,19 +256,7 @@ def _serialize_charge(charge: Charge, client_name: str | None = None) -> dict:
     }
 
 
-def _serialize_billing_schedule(schedule: BillingSchedule, client_name: str) -> dict:
-    return {
-        "id": schedule.id,
-        "client_id": schedule.client_id,
-        "client_name": client_name,
-        "day_of_month": schedule.day_of_month,
-        "active": schedule.active,
-        "created_at": schedule.created_at,
-        "updated_at": schedule.updated_at,
-    }
-
-
-def _serialize_billing_document(document: BillingDocument, client_name: str) -> dict:
+def _serialize_billing_document(document: BillingDocument, client_name: str) -> _BillingDocumentData:
     return {
         "id": document.id,
         "client_id": document.client_id,
@@ -247,7 +361,7 @@ def _total_volume_for_quantities(
 
 
 def _calculate_storage_amount_from_daily_volumes(
-    daily_volumes: list[Decimal | float | int | None],
+    daily_volumes: Sequence[Decimal | float | int | None],
     storage_rate: Decimal | float | int | None,
     days_in_month: int,
 ) -> Decimal:
@@ -262,7 +376,7 @@ def _calculate_storage_amount_from_daily_volumes(
 
 
 def _accumulate_storage_volume_for_daily_volumes(
-    daily_volumes: list[Decimal | float | int | None],
+    daily_volumes: Sequence[Decimal | float | int | None],
 ) -> Decimal:
     total = Decimal("0.000")
     for volume in daily_volumes:
@@ -295,7 +409,7 @@ def _resolve_storage_volume(
 
 def _build_daily_storage_volumes(
     current_quantities: dict[int, int],
-    movement_rows: list[dict],
+    movement_rows: Sequence[_MovementRow],
     product_volumes: dict[int, Decimal],
     start_day: date,
     end_day: date,
@@ -336,7 +450,7 @@ def _build_daily_storage_volumes(
 
 def _rewind_quantities_to_day(
     current_quantities: dict[int, int],
-    movement_rows: list[dict],
+    movement_rows: Sequence[_MovementRow],
     end_day: date,
 ) -> dict[int, int]:
     state = {product_id: max(int(quantity or 0), 0) for product_id, quantity in current_quantities.items()}
@@ -354,7 +468,7 @@ def _rewind_quantities_to_day(
 
 
 def _collect_invalid_movement_product_ids(
-    movement_rows: list[dict],
+    movement_rows: Sequence[_MovementRow],
     product_volumes: dict[int, Decimal],
     end: datetime,
 ) -> set[int]:
@@ -369,7 +483,7 @@ def _collect_invalid_movement_product_ids(
 
 def _collect_invalid_period_end_stock_product_ids(
     current_quantities: dict[int, int],
-    movement_rows: list[dict],
+    movement_rows: Sequence[_MovementRow],
     product_volumes: dict[int, Decimal],
     billable_end_day: date,
 ) -> set[int]:
@@ -475,7 +589,7 @@ async def _build_variable_storage_daily_rows(
         .order_by(StockMovement.created_at.desc(), StockMovement.id.desc())
     )
 
-    movement_rows: list[dict] = []
+    movement_rows: list[_MovementRow] = []
     for product_id, quantity, created_at, volume_m3, width_cm, height_cm, depth_cm in movement_result.all():
         resolved_volume = _resolve_storage_volume(volume_m3, width_cm, height_cm, depth_cm)
         current_quantities.setdefault(product_id, 0)
@@ -548,10 +662,10 @@ async def _calculate_variable_storage_metrics(
 
 
 def _calculate_storage_metrics_from_record(
-    storage_record: ClientStorageRecord,
+    storage_m3: Decimal | float | int | None,
     storage_rate: Decimal,
 ) -> tuple[Decimal, Decimal, Decimal, bool]:
-    total_m3 = _to_decimal(storage_record.storage_m3, THREEPLACES)
+    total_m3 = _to_decimal(storage_m3, THREEPLACES)
     accumulated_m3 = total_m3
     storage_amount = _to_decimal(total_m3 * storage_rate)
     return total_m3, accumulated_m3, storage_amount, False
@@ -591,7 +705,7 @@ async def _calculate_fixed_storage_preview_metrics(
         )
         return _calculate_fixed_storage_metrics(storage_m3, fixed_storage_amount)
 
-    current_total_m3, _daily_rows, missing_storage = await _build_variable_storage_daily_rows(
+    current_total_m3, _, missing_storage = await _build_variable_storage_daily_rows(
         db,
         client_id,
         period,
@@ -618,16 +732,16 @@ def _calculate_month_peak_storage_metrics(
 
 
 def _build_storage_report_rows_from_record(
-    storage_record: ClientStorageRecord,
+    storage_m3: Decimal | float | int | None,
     start: datetime,
     days_in_month: int,
     daily_rate_per_m3: Decimal,
     storage_rate: Decimal,
-) -> tuple[Decimal, list[dict], Decimal]:
-    current_m3 = _to_decimal(storage_record.storage_m3, THREEPLACES)
+) -> tuple[Decimal, list[_StorageReportRow], Decimal]:
+    current_m3 = _to_decimal(storage_m3, THREEPLACES)
     storage_total = _to_decimal(current_m3 * storage_rate)
     rounded_daily_amount = _to_decimal(current_m3 * daily_rate_per_m3)
-    rows = [
+    rows: list[_StorageReportRow] = [
         {
             "date": (start.date() + timedelta(days=index)),
             "volume_m3": float(current_m3),
@@ -653,9 +767,9 @@ def _build_fixed_storage_report_rows(
     start: datetime,
     days_in_month: int,
     storage_total: Decimal,
-) -> list[dict]:
+) -> list[_StorageReportRow]:
     rounded_daily_amount = _to_decimal(storage_total / Decimal(days_in_month))
-    rows = []
+    rows: list[_StorageReportRow] = []
     running_total = Decimal("0.00")
     for index in range(days_in_month):
         amount = rounded_daily_amount
@@ -678,7 +792,7 @@ async def get_storage_daily_report(
     user: User,
     client_id: int,
     period: str,
-) -> dict:
+) -> dict[str, object]:
     client = await db.get(Client, client_id)
     if client is None:
         raise NotFoundError(f"Client {client_id} not found")
@@ -717,16 +831,15 @@ async def get_storage_daily_report(
         storage_total = fixed_storage_amount
     elif storage_record is not None:
         current_m3, rows, storage_total = _build_storage_report_rows_from_record(
-            storage_record,
+            storage_record.storage_m3,
             start,
             days_in_month,
             daily_rate_per_m3,
             storage_rate,
         )
     elif default_fixed_storage_m3 is not None:
-        storage_record = type("FixedStorageRecord", (), {"storage_m3": default_fixed_storage_m3})()
         current_m3, rows, storage_total = _build_storage_report_rows_from_record(
-            storage_record,
+            default_fixed_storage_m3,
             start,
             days_in_month,
             daily_rate_per_m3,
@@ -746,7 +859,7 @@ async def get_storage_daily_report(
         current_m3, daily_rows, missing_storage = await _build_variable_storage_daily_rows(db, client.id, validated_period)
         if missing_storage:
             raise BadRequestError("Faltan datos de almacenamiento para este cliente en el período seleccionado")
-        rows = [
+        rows: list[_StorageReportRow] = [
             {
                 "date": row_date,
                 "volume_m3": float(_to_decimal(volume, THREEPLACES)),
@@ -770,7 +883,7 @@ async def get_storage_daily_report(
     }
 
 
-def _serialize_product_creation_record(record: ProductCreationRecord, client_name: str | None = None) -> dict:
+def _serialize_product_creation_record(record: ProductCreationRecord, client_name: str | None = None) -> dict[str, object]:
     return {
         "id": record.id,
         "client_id": record.client_id,
@@ -783,7 +896,7 @@ def _serialize_product_creation_record(record: ProductCreationRecord, client_nam
     }
 
 
-def _serialize_transport_dispatch_record(record: TransportDispatchRecord, client_name: str | None = None) -> dict:
+def _serialize_transport_dispatch_record(record: TransportDispatchRecord, client_name: str | None = None) -> dict[str, object]:
     return {
         "id": record.id,
         "client_id": record.client_id,
@@ -796,7 +909,7 @@ def _serialize_transport_dispatch_record(record: TransportDispatchRecord, client
     }
 
 
-def _serialize_merchandise_reception_record(record: MerchandiseReceptionRecord, client_name: str | None = None) -> dict:
+def _serialize_merchandise_reception_record(record: MerchandiseReceptionRecord, client_name: str | None = None) -> dict[str, object]:
     return {
         "id": record.id,
         "client_id": record.client_id,
@@ -810,7 +923,7 @@ def _serialize_merchandise_reception_record(record: MerchandiseReceptionRecord, 
     }
 
 
-def _serialize_manual_charge(record: ManualCharge, client_name: str | None = None, is_locked: bool = False) -> dict:
+def _serialize_manual_charge(record: ManualCharge, client_name: str | None = None, is_locked: bool = False) -> dict[str, object]:
     return {
         "id": record.id,
         "client_id": record.client_id,
@@ -863,7 +976,7 @@ async def get_global_rates(db: AsyncSession) -> BillingRates:
     return await _get_or_create_global_rates(db)
 
 
-async def update_global_rates(db: AsyncSession, data: dict) -> BillingRates:
+async def update_global_rates(db: AsyncSession, data: Mapping[str, object]) -> BillingRates:
     rates = await _get_or_create_global_rates(db)
     for key, value in data.items():
         setattr(rates, key, value)
@@ -872,7 +985,7 @@ async def update_global_rates(db: AsyncSession, data: dict) -> BillingRates:
     return rates
 
 
-async def list_client_rates(db: AsyncSession) -> list[dict]:
+async def list_client_rates(db: AsyncSession) -> list[dict[str, object]]:
     global_rates = await _get_or_create_global_rates(db)
     clients = (
         await db.execute(select(Client).where(Client.is_active.is_(True)).order_by(Client.name))
@@ -885,23 +998,26 @@ async def list_client_rates(db: AsyncSession) -> list[dict]:
     ).scalars().all()
     override_map = {item.client_id: item for item in overrides}
 
-    return [
-        {
-            "id": override_map.get(client.id).id if override_map.get(client.id) else None,
-            "client_id": client.id,
-            "client_name": client.name,
-            "storage_discount_pct": float(override_map[client.id].storage_discount_pct) if client.id in override_map and override_map[client.id].storage_discount_pct is not None else None,
-            "shipping_discount_pct": float(override_map[client.id].shipping_discount_pct) if client.id in override_map and override_map[client.id].shipping_discount_pct is not None else None,
-            "effective_storage_per_m3": float(_apply_discount(global_rates.storage_per_m3, override_map[client.id].storage_discount_pct if client.id in override_map else None)),
-            "effective_shipping_base": float(_apply_discount(global_rates.shipping_base, override_map[client.id].shipping_discount_pct if client.id in override_map else None)),
-            "effective_storage_discount_pct": float(_to_decimal(override_map[client.id].storage_discount_pct if client.id in override_map and override_map[client.id].storage_discount_pct is not None else 0)),
-            "effective_shipping_discount_pct": float(_to_decimal(override_map[client.id].shipping_discount_pct if client.id in override_map and override_map[client.id].shipping_discount_pct is not None else 0)),
-        }
-        for client in clients
-    ]
+    serialized_rates: list[dict[str, object]] = []
+    for client in clients:
+        override = override_map.get(client.id)
+        serialized_rates.append(
+            {
+                "id": override.id if override else None,
+                "client_id": client.id,
+                "client_name": client.name,
+                "storage_discount_pct": float(override.storage_discount_pct) if override and override.storage_discount_pct is not None else None,
+                "shipping_discount_pct": float(override.shipping_discount_pct) if override and override.shipping_discount_pct is not None else None,
+                "effective_storage_per_m3": float(_apply_discount(global_rates.storage_per_m3, override.storage_discount_pct if override else None)),
+                "effective_shipping_base": float(_apply_discount(global_rates.shipping_base, override.shipping_discount_pct if override else None)),
+                "effective_storage_discount_pct": float(_to_decimal(override.storage_discount_pct if override and override.storage_discount_pct is not None else 0)),
+                "effective_shipping_discount_pct": float(_to_decimal(override.shipping_discount_pct if override and override.shipping_discount_pct is not None else 0)),
+            }
+        )
+    return serialized_rates
 
 
-async def upsert_client_rates(db: AsyncSession, client_id: int, data: dict) -> dict:
+async def upsert_client_rates(db: AsyncSession, client_id: int, data: Mapping[str, object]) -> dict[str, object]:
     client = await db.get(Client, client_id)
     if client is None:
         raise NotFoundError(f"Client {client_id} not found")
@@ -932,7 +1048,7 @@ async def upsert_client_rates(db: AsyncSession, client_id: int, data: dict) -> d
     }
 
 
-def _serialize_storage_record(record: ClientStorageRecord, client_name: str) -> dict:
+def _serialize_storage_record(record: ClientStorageRecord, client_name: str) -> dict[str, object]:
     return {
         "id": record.id,
         "client_id": record.client_id,
@@ -948,7 +1064,7 @@ async def list_storage_records(
     db: AsyncSession,
     client_id: int | None = None,
     period: str | None = None,
-) -> list[dict]:
+) -> list[dict[str, object]]:
     query = select(ClientStorageRecord, Client.name).join(Client, Client.id == ClientStorageRecord.client_id)
     if client_id is not None:
         client = await db.get(Client, client_id)
@@ -962,7 +1078,7 @@ async def list_storage_records(
     return [_serialize_storage_record(record, client_name) for record, client_name in rows]
 
 
-async def create_storage_record(db: AsyncSession, data: dict) -> dict:
+async def create_storage_record(db: AsyncSession, data: _StorageRecordPayload) -> dict[str, object]:
     client = await db.get(Client, data["client_id"])
     if client is None:
         raise NotFoundError(f"Client {data['client_id']} not found")
@@ -982,7 +1098,7 @@ async def create_storage_record(db: AsyncSession, data: dict) -> dict:
     record = ClientStorageRecord(
         client_id=client.id,
         period=period,
-        storage_m3=_to_decimal(data["storage_m3"], THREEPLACES),
+        storage_m3=type_cast(float, _to_decimal(data["storage_m3"], THREEPLACES)),
     )
     db.add(record)
     await db.flush()
@@ -990,12 +1106,12 @@ async def create_storage_record(db: AsyncSession, data: dict) -> dict:
     return _serialize_storage_record(record, client.name)
 
 
-async def update_storage_record(db: AsyncSession, record_id: int, data: dict) -> dict:
+async def update_storage_record(db: AsyncSession, record_id: int, data: _StorageRecordPayload) -> dict[str, object]:
     record = await db.get(ClientStorageRecord, record_id)
     if record is None:
         raise NotFoundError(f"Storage record {record_id} not found")
 
-    record.storage_m3 = _to_decimal(data["storage_m3"], THREEPLACES)
+    record.storage_m3 = type_cast(float, _to_decimal(data["storage_m3"], THREEPLACES))
     await db.flush()
     await db.refresh(record)
 
@@ -1009,6 +1125,18 @@ async def delete_storage_record(db: AsyncSession, record_id: int) -> None:
         raise NotFoundError(f"Storage record {record_id} not found")
     await db.delete(record)
     await db.flush()
+
+
+async def _calculate_non_variable_storage_metrics(
+    db: AsyncSession,
+    client_id: int,
+    period: str,
+    storage_rate: Decimal,
+) -> tuple[Decimal, Decimal, Decimal, bool]:
+    current_total_m3, daily_rows, missing_storage = await _build_variable_storage_daily_rows(db, client_id, period)
+    if missing_storage:
+        return current_total_m3, Decimal("0.000"), Decimal("0.00"), True
+    return _calculate_month_peak_storage_metrics(current_total_m3, daily_rows, storage_rate)
 
 
 async def _build_preview_rows(
@@ -1027,17 +1155,6 @@ async def _build_preview_rows(
             return []
         clients_query = clients_query.where(Client.id == user.client_id)
 
-
-async def _calculate_non_variable_storage_metrics(
-    db: AsyncSession,
-    client_id: int,
-    period: str,
-    storage_rate: Decimal,
-) -> tuple[Decimal, Decimal, Decimal, bool]:
-    current_total_m3, daily_rows, missing_storage = await _build_variable_storage_daily_rows(db, client_id, period)
-    if missing_storage:
-        return current_total_m3, Decimal("0.000"), Decimal("0.00"), True
-    return _calculate_month_peak_storage_metrics(current_total_m3, daily_rows, storage_rate)
     clients = (await db.execute(clients_query)).scalars().all()
     if not clients:
         return []
@@ -1074,7 +1191,7 @@ async def _calculate_non_variable_storage_metrics(
         )
         .group_by(Order.client_id)
     )
-    order_metrics_by_client = {
+    order_metrics_by_client: dict[int, _OrderMetrics] = {
         client_id: {
             "total_orders": int(total_orders),
             "shipping_source_amount": _to_decimal(shipping_source_amount),
@@ -1161,7 +1278,7 @@ async def _calculate_non_variable_storage_metrics(
         )
         .group_by(LabelPrintRecord.client_id)
     )
-    label_print_metrics_by_client = {
+    label_print_metrics_by_client: dict[int, _AmountCountMetrics] = {
         client_id: {
             "amount": _to_decimal(total_amount),
             "count": int(total_count or 0),
@@ -1178,7 +1295,7 @@ async def _calculate_non_variable_storage_metrics(
     )
     period_product_rows = missing_label_print_rows.all()
     product_label_refs = [_product_label_reference(product_id) for _, product_id in period_product_rows]
-    existing_product_label_refs = set()
+    existing_product_label_refs: set[str] = set()
     if product_label_refs:
         existing_product_label_refs = set(
             (
@@ -1209,7 +1326,7 @@ async def _calculate_non_variable_storage_metrics(
         )
         .group_by(TransportDispatchRecord.client_id)
     )
-    transport_dispatch_metrics_by_client = {
+    transport_dispatch_metrics_by_client: dict[int, _AmountCountMetrics] = {
         client_id: {
             "amount": _to_decimal(total_amount),
             "count": int(total_count or 0),
@@ -1261,7 +1378,7 @@ async def _calculate_non_variable_storage_metrics(
         )
         .order_by(ManualCharge.fecha.asc(), ManualCharge.id.asc())
     )
-    manual_charge_items_by_client: dict[int, list[dict]] = {}
+    manual_charge_items_by_client: dict[int, list[_ManualChargeItem]] = {}
     for charge_client_id, charge_id, descripcion, tipo, fecha, monto in manual_charge_items_rows.all():
         manual_charge_items_by_client.setdefault(charge_client_id, []).append(
             {
@@ -1286,7 +1403,7 @@ async def _calculate_non_variable_storage_metrics(
         )
         .group_by(MerchandiseReceptionRecord.client_id)
     )
-    merchandise_reception_metrics_by_client = {
+    merchandise_reception_metrics_by_client: dict[int, _AmountCountMetrics] = {
         client_id: {
             "amount": _to_decimal(total_amount),
             "count": int(total_count or 0),
@@ -1318,13 +1435,12 @@ async def _calculate_non_variable_storage_metrics(
             )
         elif storage_record is not None:
             total_m3, accumulated_m3, storage_amount, missing_storage = _calculate_storage_metrics_from_record(
-                storage_record,
+                storage_record.storage_m3,
                 storage_rate,
             )
         elif default_fixed_storage_m3 is not None:
-            fixed_storage_record = type("FixedStorageRecord", (), {"storage_m3": default_fixed_storage_m3})()
             total_m3, accumulated_m3, storage_amount, missing_storage = _calculate_storage_metrics_from_record(
-                fixed_storage_record,
+                default_fixed_storage_m3,
                 storage_rate,
             )
         elif not client.variable_storage_enabled:
@@ -1437,7 +1553,7 @@ async def _refresh_document_statuses(db: AsyncSession) -> None:
         await db.flush()
 
 
-async def preview_charges(db: AsyncSession, user: User, period: str) -> list[dict]:
+async def preview_charges(db: AsyncSession, user: User, period: str) -> list[dict[str, object]]:
     previews = await _build_preview_rows(db, period, user)
     return [
         {
@@ -1505,28 +1621,28 @@ async def generate_charges(db: AsyncSession, period: str, due_date: date | None,
             charges.append(charge)
             continue
 
-        charge.total_m3 = preview.total_m3
-        charge.accumulated_m3 = preview.accumulated_m3
+        charge.total_m3 = _as_model_float(preview.total_m3)
+        charge.accumulated_m3 = _as_model_float(preview.accumulated_m3)
         charge.total_orders = preview.total_orders
-        charge.base_storage_rate = preview.storage_base_rate
-        charge.storage_discount_pct = preview.storage_discount_pct
-        charge.applied_storage_rate = preview.storage_rate
-        charge.base_preparation_rate = preview.preparation_base_rate
-        charge.preparation_discount_pct = preview.preparation_discount_pct
-        charge.applied_preparation_rate = preview.preparation_rate
-        charge.applied_shipping_base = preview.shipping_base
-        charge.applied_shipping_multiplier = preview.shipping_multiplier
-        charge.shipping_base_amount = preview.shipping_base_amount
-        charge.shipping_discount_pct = preview.shipping_discount_pct
-        charge.storage_amount = preview.storage_amount
-        charge.preparation_amount = preview.preparation_amount
-        charge.product_creation_amount = preview.product_creation_amount
-        charge.label_print_amount = preview.label_print_amount
-        charge.transport_dispatch_amount = preview.transport_dispatch_amount
-        charge.truck_unloading_amount = preview.truck_unloading_amount
-        charge.manual_charge_amount = preview.manual_charge_amount
-        charge.shipping_amount = preview.shipping_amount
-        charge.total = preview.total
+        charge.base_storage_rate = _as_model_float(preview.storage_base_rate)
+        charge.storage_discount_pct = _as_model_float(preview.storage_discount_pct)
+        charge.applied_storage_rate = _as_model_float(preview.storage_rate)
+        charge.base_preparation_rate = _as_model_float(preview.preparation_base_rate)
+        charge.preparation_discount_pct = _as_model_float(preview.preparation_discount_pct)
+        charge.applied_preparation_rate = _as_model_float(preview.preparation_rate)
+        charge.applied_shipping_base = _as_model_float(preview.shipping_base)
+        charge.applied_shipping_multiplier = _as_model_float(preview.shipping_multiplier)
+        charge.shipping_base_amount = _as_model_float(preview.shipping_base_amount)
+        charge.shipping_discount_pct = _as_model_float(preview.shipping_discount_pct)
+        charge.storage_amount = _as_model_float(preview.storage_amount)
+        charge.preparation_amount = _as_model_float(preview.preparation_amount)
+        charge.product_creation_amount = _as_model_float(preview.product_creation_amount)
+        charge.label_print_amount = _as_model_float(preview.label_print_amount)
+        charge.transport_dispatch_amount = _as_model_float(preview.transport_dispatch_amount)
+        charge.truck_unloading_amount = _as_model_float(preview.truck_unloading_amount)
+        charge.manual_charge_amount = _as_model_float(preview.manual_charge_amount)
+        charge.shipping_amount = _as_model_float(preview.shipping_amount)
+        charge.total = _as_model_float(preview.total)
         charge.status = ChargeStatus.pending
         charge.due_date = resolved_due_date
         charges.append(charge)
@@ -1545,7 +1661,7 @@ async def list_charges(
     due_date_from: str | None = None,
     due_date_to: str | None = None,
     status: str | None = None,
-) -> list[dict]:
+) -> list[_ChargeData]:
     query = select(Charge, Client.name).join(Client, Client.id == Charge.client_id)
     if period:
         query = query.where(Charge.period == period)
@@ -1579,7 +1695,7 @@ async def list_charges(
     return [_serialize_charge(charge, client_name) for charge, client_name in rows]
 
 
-async def get_charge(db: AsyncSession, charge_id: int, user: User) -> dict:
+async def get_charge(db: AsyncSession, charge_id: int, user: User) -> _ChargeData:
     row = (
         await db.execute(
             select(Charge, Client.name).join(Client, Client.id == Charge.client_id).where(Charge.id == charge_id)
@@ -1647,16 +1763,16 @@ async def generate_billing_documents(
             documents.append(document)
             continue
 
-        document.accumulated_m3 = preview.accumulated_m3
-        document.storage_total = preview.storage_amount
-        document.preparation_total = preview.preparation_amount
-        document.product_creation_total = preview.product_creation_amount
-        document.label_print_total = preview.label_print_amount
-        document.transport_dispatch_total = preview.transport_dispatch_amount
-        document.truck_unloading_total = preview.truck_unloading_amount
-        document.manual_charge_total = preview.manual_charge_amount
-        document.shipping_total = preview.shipping_amount
-        document.total = preview.total
+        document.accumulated_m3 = _as_model_float(preview.accumulated_m3)
+        document.storage_total = _as_model_float(preview.storage_amount)
+        document.preparation_total = _as_model_float(preview.preparation_amount)
+        document.product_creation_total = _as_model_float(preview.product_creation_amount)
+        document.label_print_total = _as_model_float(preview.label_print_amount)
+        document.transport_dispatch_total = _as_model_float(preview.transport_dispatch_amount)
+        document.truck_unloading_total = _as_model_float(preview.truck_unloading_amount)
+        document.manual_charge_total = _as_model_float(preview.manual_charge_amount)
+        document.shipping_total = _as_model_float(preview.shipping_amount)
+        document.total = _as_model_float(preview.total)
         document.due_date = due_date
         document.status = (
             BillingDocumentStatus.overdue
@@ -1676,7 +1792,7 @@ async def generate_single_billing_document(
     client_id: int,
     period: str,
     overwrite: bool = True,
-) -> dict:
+) -> _BillingDocumentData:
     documents = await generate_billing_documents(db, period, overwrite=overwrite, client_id=client_id)
     if not documents:
         raise BadRequestError("No se pudo generar el remito solicitado")
@@ -1692,7 +1808,7 @@ async def list_billing_documents(
     period: str | None = None,
     client_id: int | None = None,
     status: str | None = None,
-) -> list[dict]:
+) -> list[_BillingDocumentData]:
     await _refresh_document_statuses(db)
 
     query = select(BillingDocument, Client.name).join(Client, Client.id == BillingDocument.client_id)
@@ -1722,7 +1838,7 @@ async def list_billing_documents(
     return [_serialize_billing_document(document, client_name) for document, client_name in rows]
 
 
-async def mark_billing_document_paid(db: AsyncSession, document_id: int, user: User) -> dict:
+async def mark_billing_document_paid(db: AsyncSession, document_id: int, user: User) -> _BillingDocumentData:
     row = (
         await db.execute(
             select(BillingDocument, Client.name)
@@ -1741,7 +1857,7 @@ async def mark_billing_document_paid(db: AsyncSession, document_id: int, user: U
     return _serialize_billing_document(document, client_name)
 
 
-async def get_billing_alerts(db: AsyncSession, user: User) -> dict:
+async def get_billing_alerts(db: AsyncSession, user: User) -> _BillingAlertsData:
     await _refresh_document_statuses(db)
 
     today = date.today()
@@ -1760,8 +1876,8 @@ async def get_billing_alerts(db: AsyncSession, user: User) -> dict:
         query = query.where(BillingDocument.client_id == user.client_id)
 
     rows = (await db.execute(query)).all()
-    due_soon_documents: list[dict] = []
-    overdue_documents: list[dict] = []
+    due_soon_documents: list[_BillingDocumentData] = []
+    overdue_documents: list[_BillingDocumentData] = []
     for document, client_name in rows:
         serialized = _serialize_billing_document(document, client_name)
         if document.status == BillingDocumentStatus.overdue:
@@ -1828,7 +1944,7 @@ async def list_preparation_records(
     period: str | None = None,
     order_id: int | None = None,
     user: User | None = None,
-) -> list[dict]:
+) -> list[dict[str, object]]:
     query = (
         select(PreparationRecord, Client.name)
         .join(Client, Client.id == PreparationRecord.client_id)
@@ -1870,14 +1986,14 @@ async def list_preparation_records(
     ]
 
 
-async def record_product_created(db: AsyncSession, product) -> None:
+async def record_product_created(db: AsyncSession, product: Product) -> None:
     rates = await _get_or_create_global_rates(db)
     record = ProductCreationRecord(
         client_id=product.client_id,
         product_id=product.id,
         product_name=product.name,
         sku=product.sku,
-        price_applied=_to_decimal(rates.product_creation_fee),
+        price_applied=_as_model_float(_to_decimal(rates.product_creation_fee)),
     )
     db.add(record)
 
@@ -1925,14 +2041,15 @@ async def record_product_first_label_print(
     product: Product,
     printed_at: datetime | None = None,
 ) -> bool:
-    if product.id is None:
+    product_id = getattr(product, "id", None)
+    if product_id is None:
         return False
 
     existing = (
         await db.execute(
             select(LabelPrintRecord.id).where(
                 LabelPrintRecord.label_type == "product",
-                LabelPrintRecord.order_number == _product_label_reference(product.id),
+                LabelPrintRecord.order_number == _product_label_reference(product_id),
             )
         )
     ).scalar_one_or_none()
@@ -1941,12 +2058,12 @@ async def record_product_first_label_print(
 
     rates = await _get_or_create_global_rates(db)
     db.add(
-        LabelPrintRecord(
+            LabelPrintRecord(
             client_id=product.client_id,
             order_id=None,
-            order_number=_product_label_reference(product.id),
+                order_number=_product_label_reference(product_id),
             label_type="product",
-            price_applied=_to_decimal(rates.label_print_fee),
+                price_applied=_as_model_float(_to_decimal(rates.label_print_fee)),
             printed_at=printed_at or datetime.now(timezone.utc),
         )
     )
@@ -1988,11 +2105,12 @@ async def _create_missing_product_label_print_records(db: AsyncSession, rate: De
 
 
 async def record_first_label_print(
-    db: AsyncSession,
-    orders,
-    printed_at: datetime,
-    label_type,
+    _db: AsyncSession,
+    _orders: Sequence[Order],
+    _printed_at: datetime,
+    _label_type: str,
 ) -> None:
+    del _db, _orders, _printed_at, _label_type
     return None
 
 
@@ -2022,13 +2140,13 @@ async def record_transport_dispatch(
         transportista=(transportista or "Sin especificar").strip() or "Sin especificar",
         cantidad_pedidos=max(int(cantidad_pedidos), 0),
         origen=(origen or "manual_facturacion").strip() or "manual_facturacion",
-        costo_aplicado=_to_decimal(rates.transport_dispatch_fee),
+        costo_aplicado=_as_model_float(_to_decimal(rates.transport_dispatch_fee)),
         fecha=fecha or datetime.now(timezone.utc),
     )
     db.add(record)
 
 
-async def create_transport_dispatch_record(db: AsyncSession, data: dict) -> dict:
+async def create_transport_dispatch_record(db: AsyncSession, data: _TransportDispatchPayload) -> dict[str, object]:
     client = await db.get(Client, data["client_id"])
     if client is None:
         raise NotFoundError(f"Client {data['client_id']} not found")
@@ -2087,13 +2205,13 @@ async def record_merchandise_reception(
         fecha=fecha or datetime.now(timezone.utc),
         cantidad_camiones=truck_count,
         observaciones=(observaciones or "").strip() or None,
-        costo_unitario=unit_cost,
-        costo_total=total_cost,
+        costo_unitario=_as_model_float(unit_cost),
+        costo_total=_as_model_float(total_cost),
     )
     db.add(record)
 
 
-async def create_merchandise_reception_record(db: AsyncSession, data: dict) -> dict:
+async def create_merchandise_reception_record(db: AsyncSession, data: _MerchandiseReceptionPayload) -> dict[str, object]:
     client = await db.get(Client, data["client_id"])
     if client is None:
         raise NotFoundError(f"Client {data['client_id']} not found")
@@ -2151,7 +2269,7 @@ async def list_manual_charges(
     client_id: int | None = None,
     period: str | None = None,
     user: User | None = None,
-) -> list[dict]:
+) -> list[dict[str, object]]:
     query = (
         select(ManualCharge, Client.name)
         .join(Client, Client.id == ManualCharge.client_id)
@@ -2170,7 +2288,7 @@ async def list_manual_charges(
 
     rows = (await db.execute(query)).all()
     locked_cache: dict[tuple[int, str], bool] = {}
-    serialized: list[dict] = []
+    serialized: list[dict[str, object]] = []
     for record, client_name in rows:
         cache_key = (record.client_id, record.periodo)
         if cache_key not in locked_cache:
@@ -2179,7 +2297,7 @@ async def list_manual_charges(
     return serialized
 
 
-async def create_manual_charge(db: AsyncSession, data: dict) -> dict:
+async def create_manual_charge(db: AsyncSession, data: _ManualChargePayload) -> dict[str, object]:
     client = await db.get(Client, data["client_id"])
     if client is None:
         raise NotFoundError(f"Client {data['client_id']} not found")
@@ -2195,7 +2313,7 @@ async def create_manual_charge(db: AsyncSession, data: dict) -> dict:
 
     record = ManualCharge(
         client_id=client.id,
-        monto=amount,
+        monto=_as_model_float(amount),
         descripcion=(data.get("descripcion") or "").strip() or None,
         tipo=(data.get("tipo") or "").strip() or None,
         fecha=charge_date,
@@ -2220,7 +2338,7 @@ async def list_product_creation_records(
     client_id: int | None = None,
     period: str | None = None,
     user: User | None = None,
-) -> list[dict]:
+) -> list[dict[str, object]]:
     query = (
         select(ProductCreationRecord, Client.name)
         .join(Client, Client.id == ProductCreationRecord.client_id)
@@ -2247,7 +2365,7 @@ async def list_transport_dispatch_records(
     client_id: int | None = None,
     period: str | None = None,
     user: User | None = None,
-) -> list[dict]:
+) -> list[dict[str, object]]:
     query = (
         select(TransportDispatchRecord, Client.name)
         .join(Client, Client.id == TransportDispatchRecord.client_id)
@@ -2274,7 +2392,7 @@ async def list_merchandise_reception_records(
     client_id: int | None = None,
     period: str | None = None,
     user: User | None = None,
-) -> list[dict]:
+) -> list[dict[str, object]]:
     query = (
         select(MerchandiseReceptionRecord, Client.name)
         .join(Client, Client.id == MerchandiseReceptionRecord.client_id)
